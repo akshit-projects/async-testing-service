@@ -1,0 +1,17 @@
+GET     /api/v1/flows               ab.async.tester.controllers.FlowsController.getFlows
+GET     /api/v1/flows/run          ab.async.tester.controllers.FlowsController.runFlow()
+POST    /api/v1/flows/validate     ab.async.tester.controllers.FlowsController.validateFlow()
+GET     /api/v1/flows/:id          ab.async.tester.controllers.FlowsController.getFlow(id: String)
+POST    /api/v1/flows              ab.async.tester.controllers.FlowsController.addFlow()
+PUT     /api/v1/flows              ab.async.tester.controllers.FlowsController.updateFlow()
+
+
+# Resource endpoints
+GET     /api/v1/resources          ab.async.tester.controllers.ResourceController.getResources
+GET     /api/v1/resources/:id      ab.async.tester.controllers.ResourceController.getResource(id: String)
+POST    /api/v1/resources          ab.async.tester.controllers.ResourceController.createResource
+PUT     /api/v1/resources          ab.async.tester.controllers.ResourceController.updateResource
+DELETE  /api/v1/resources/:id      ab.async.tester.controllers.ResourceController.deleteResource(id: String)
+
+# Metrics endpoint
+GET     /metrics                   ab.async.tester.controllers.MetricsController.metrics
