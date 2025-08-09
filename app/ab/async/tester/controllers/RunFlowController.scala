@@ -1,13 +1,12 @@
 package ab.async.tester.controllers
 
 import ab.async.tester.domain.requests.RunFlowRequest
+import ab.async.tester.library.utils.JsonParsers
+import ab.async.tester.library.utils.JsonParsers.ResultHelpers
 import ab.async.tester.service.flows.FlowExecutionService
-import akka.NotUsed
-import akka.actor.ActorSystem
 import io.circe.generic.auto._
-import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
-import akka.stream.{Materializer, OverflowStrategy}
-import io.circe.jawn.decode
+import io.circe.syntax._
+import play.api.Logger
 import play.api.mvc._
 
 import javax.inject._
@@ -19,25 +18,19 @@ class RunFlowController @Inject()(
                                    flowExecService: FlowExecutionService,
                                 )(implicit ec: ExecutionContext) extends AbstractController(cc) {
 
-  def runFlow(): WebSocket = WebSocket.acceptOrResult[String, String] { _ =>
-    Future.successful(Right(handleWebSocket()))
-  }
+  private val logger = Logger(this.getClass)
 
-  private def handleWebSocket(): Flow[String, String, NotUsed] = {
-    Flow[String].prefixAndTail(1).mapAsync(1) {
-      case (Seq(firstMsg), _) =>
-        decode[RunFlowRequest](firstMsg) match {
-          case Left(err) =>
-            Future.failed(new RuntimeException(s"Invalid RunRequest JSON: $err"))
-          case Right(runRequest) =>
-            flowExecService.startExecution(runRequest)
-        }
-    }.flatMapConcat { execStreams =>
-      execStreams.source
-        .watchTermination() { (_, done) =>
-          done.foreach { _ =>
-            flowExecService.stopExecution(execStreams.executionId)
-          }
+  /** POST /api/v1/flows/run - Create execution and publish to Kafka */
+  def runFlow(): Action[AnyContent] = Action.async { implicit request =>
+    JsonParsers.parseJsonBody[RunFlowRequest](request)(implicitly, ec) match {
+      case Left(result) => Future.successful(result)
+      case Right(runRequest) =>
+        flowExecService.createExecution(runRequest).map { executionResponse =>
+          Created(executionResponse.asJson.noSpaces)
+        }.recover {
+          case ex =>
+            logger.error("runFlow failed", ex)
+            InternalServerError(Map("error" -> "failed to create execution").asJsonNoSpaces)
         }
     }
   }

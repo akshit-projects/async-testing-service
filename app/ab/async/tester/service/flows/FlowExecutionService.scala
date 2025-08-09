@@ -1,4 +1,6 @@
 package ab.async.tester.service.flows
+
+import ab.async.tester.domain.execution.Execution
 import ab.async.tester.domain.requests.RunFlowRequest
 import akka.NotUsed
 import akka.stream.scaladsl.{Source, SourceQueueWithComplete}
@@ -14,13 +16,20 @@ case class ExecutionStreams(
 
 trait FlowExecutionService {
   /**
-   * Starts execution for a given RunRequest.
-   * Returns a SourceQueue which will emit execution updates as JSON to be streamed to the client.
+   * Creates execution and publishes to Kafka for workers to pick up.
+   * Returns execution details without streaming.
    */
-  def startExecution(runRequest: RunFlowRequest): Future[ExecutionStreams]
+  def createExecution(runRequest: RunFlowRequest): Future[Execution]
+
+  /**
+   * Creates a stream for execution updates by subscribing to Redis.
+   * Returns a Source that emits execution updates as JSON strings.
+   */
+  def streamExecutionUpdates(executionId: String): Source[String, NotUsed]
 
   /**
    * Called when WebSocket connection terminates to clean up resources.
    */
-  def stopExecution(executionId: String): Unit
+  def stopExecutionStream(executionId: String): Unit
+
 }
