@@ -15,10 +15,21 @@ class KafkaClient {
     props.put("key.serializer", kafkaConfig.keySerializer)
     props.put("value.serializer", kafkaConfig.valueSerializer)
 
+    // Add producer-specific configurations for reliability
+    props.put("acks", "all") // Wait for all replicas to acknowledge
+    props.put("retries", "3") // Retry failed sends
+    props.put("batch.size", "16384") // Batch size in bytes
+    props.put("linger.ms", "1") // Wait time for batching
+    props.put("buffer.memory", "33554432") // Total memory for buffering
+    props.put("enable.idempotence", "true") // Ensure exactly-once delivery
+
     // Add any additional config provided
-    kafkaConfig.otherConfig.map {
+    kafkaConfig.otherConfig.foreach {
       case (k, v) => props.put(k, v)
     }
+
+    println(s"🔧 Creating Kafka producer with config:")
+    props.forEach((k, v) => println(s"  $k = $v"))
 
     new KafkaProducer[String, String](props)
   }

@@ -1,5 +1,12 @@
 package ab.async.tester.workers.app.runner
 
+import ab.async.tester.domain.enums.StepStatus
+import ab.async.tester.domain.resource.APISchemaConfig
+import ab.async.tester.domain.step.{FlowStep, HttpResponse, HttpStepMeta, StepError, StepResponse}
+import ab.async.tester.library.repository.resource.ResourceRepository
+import com.google.inject.{Inject, Singleton}
+import play.api.libs.ws.StandaloneWSClient
+
 import scala.concurrent.{ExecutionContext, Future}
 
 
@@ -7,7 +14,7 @@ import scala.concurrent.{ExecutionContext, Future}
  * HTTP step runner for making HTTP requests
  */
 @Singleton
-class HttpStepRunner @Inject()(wsClient: WSClient)(implicit ec: ExecutionContext, resourceRepository: ResourceRepository) extends BaseStepRunner {
+class HttpStepRunner @Inject()(wsClient: StandaloneWSClient, resourceRepository: ResourceRepository)(implicit ec: ExecutionContext) extends BaseStepRunner {
   override protected val runnerName: String = "HttpStepRunner"
 
   override protected def executeStep(step: FlowStep, previousResults: List[StepResponse]): Future[StepResponse] = {

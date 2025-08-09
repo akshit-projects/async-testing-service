@@ -36,8 +36,13 @@ class RedisPubSubService @Inject()(redisClient: RedisClient)(implicit ec: Execut
 
   private def startSubscription(channel: String)(blockingEc: ExecutionContext): Unit = Future {
     val j = pool.getResource
-    try j.subscribe(sub, channel)
-    finally j.close()
+    try {
+      j.subscribe(sub, channel)
+    } catch {
+      case ex: Exception =>
+        print(ex)
+    }
+
   }(blockingEc)
 
   def registerQueue(executionId: String, queue: SourceQueueWithComplete[io.circe.Json]): Unit = {

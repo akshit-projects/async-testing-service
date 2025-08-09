@@ -1,126 +1,151 @@
 package ab.async.tester.workers.app.runner
 
-import ab.async.tester.domain.execution.ExecutionStatusUpdate
-import ab.async.tester.domain.flow.Floww
+import ab.async.tester.domain.enums.{ExecutionStatus, StepStatus}
+import ab.async.tester.domain.execution.{Execution, ExecutionStatusUpdate, ExecutionStep}
+import ab.async.tester.domain.step.{FlowStep, StepError, StepResponse}
+import ab.async.tester.library.cache.RedisClient
 import ab.async.tester.library.repository.execution.ExecutionRepository
-import akka.actor.ActorRef
-import akka.stream.scaladsl.{Keep, Sink, Source}
-import akka.stream.{CompletionStrategy, OverflowStrategy}
+import ab.async.tester.library.utils.MetricUtils
+import ab.async.tester.workers.app.clients.kafka.KafkaConsumer
+import akka.actor.ActorSystem
+import io.circe.generic.auto._
+import akka.stream.scaladsl.Sink
 import com.google.inject.{ImplementedBy, Inject, Singleton}
-import org.reactivestreams.Publisher
-import play.api.Logger
+import io.circe.jawn.decode
+import io.circe.syntax._
+import play.api.{Configuration, Logger}
+import redis.clients.jedis.Jedis
 
 import scala.collection.mutable.{Map => MutableMap}
-import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.util.{Failure, Success}
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 
 /**
- * Flow runner trait
+ * Flow runner trait for worker processes
  */
 @ImplementedBy(classOf[FlowRunnerImpl])
 trait FlowRunner {
   /**
-   * Run a flow with steps
-   *
-   * @param flow the flow to run
-   * @return a Source of status updates from the flow execution
+   * Start consuming Kafka messages and executing flows
    */
-  def runFlow(flow: Floww): Source[ExecutionStatusUpdate, akka.NotUsed]
+  def startFlowConsumer(): Unit
+
+  /**
+   * Execute a single execution
+   * @param execution the execution to run
+   * @return Future indicating completion
+   */
+  def executeFlow(execution: Execution): Future[Unit]
 }
 
 /**
- * Manages flow step execution
+ * Worker implementation that consumes Kafka messages and executes flows
  */
 @Singleton
 class FlowRunnerImpl @Inject()(
   executionRepository: ExecutionRepository,
-  stepRunnerRegistry: StepRunnerRegistry
-)(implicit system: akka.actor.ActorSystem, ec: ExecutionContext) extends FlowRunner {
-  
+  stepRunnerRegistry: StepRunnerRegistry,
+  redisClient: RedisClient,
+  configuration: Configuration
+)(implicit system: ActorSystem, ec: ExecutionContext) extends FlowRunner {
+
   private implicit val logger: Logger = Logger(this.getClass)
   private val runnerName = "FlowRunner"
+
+  // Kafka configuration
+  private val workerQueueTopic = configuration.get[String]("events.workerQueueTopic")
+  private val redisChannel = "internal-executions-topic"
   
   /**
-   * Run a flow with steps
+   * Start consuming Kafka messages and executing flows
    */
-  override def runFlow(flow: Floww): Source[ExecutionStatusUpdate, akka.NotUsed] = {
-    // Define completion and failure matchers with explicit parameter types
-    val completionMatcher: PartialFunction[Any, CompletionStrategy] = {
-      case msg: ExecutionStatusUpdate if msg.`type` == StatusUpdateType.Complete => 
-        CompletionStrategy.draining
-    }
-    
-    val failureMatcher: PartialFunction[Any, Exception] = {
-      case msg: ExecutionStatusUpdate if msg.`type` == StatusUpdateType.Error => 
-        new Exception("Flow execution error")
-    }
-    
-    // Using Source.actorRef with explicit typing
-    val (actorRef: ActorRef, publisher: Publisher[ExecutionStatusUpdate]) = Source
-      .actorRef[ExecutionStatusUpdate](
-        completionMatcher,
-        failureMatcher,
-        bufferSize = 100,
-        overflowStrategy = OverflowStrategy.backpressure
-      )
-      .toMat(Sink.asPublisher(false))(Keep.both)
-      .run()
+  override def startFlowConsumer(): Unit = {
+    logger.info(s"Starting FlowRunner consumer for topic: $workerQueueTopic")
 
-    // Execute the flow in the background
-    MetricUtils.withAsyncServiceMetrics(runnerName, "runFlow") {
-      executeFlow(flow, actorRef)
-    }.recover {
-      case e: Exception =>
-        logger.error(s"Error executing flow ${flow.id.getOrElse("unknown")}: ${e.getMessage}", e)
-        actorRef ! ExecutionStatusUpdate.createError("Flow execution failed: " + e.getMessage, "FLOW_EXEC_ERROR")
-    }
+    KafkaConsumer.subscribeTopic(workerQueueTopic)
+      .mapAsync(10) { msg =>
+        val messageValue = msg.record.value()
+        logger.debug(s"Received Kafka message: $messageValue")
 
-    // Return the source from the publisher with proper typing
-    Source.fromPublisher(publisher)
+        // Parse the execution from JSON
+        decode[Execution](messageValue) match {
+          case Right(execution) =>
+            logger.info(s"Processing execution: ${execution.id}")
+            executeFlow(execution).map { _ =>
+              // Commit the Kafka message after successful processing
+              msg.committableOffset
+            }.recover {
+              case e: Exception =>
+                logger.error(s"Failed to process execution ${execution.id}: ${e.getMessage}", e)
+                // Still commit to avoid reprocessing the same failed message
+                msg.committableOffset
+            }
+          case Left(error) =>
+            logger.error(s"Failed to parse execution from Kafka message: $error")
+            // Commit malformed messages to avoid infinite reprocessing
+            Future.successful(msg.committableOffset)
+        }
+      }
+      .mapAsync(10)(_.commitScaladsl())
+      .runWith(Sink.ignore)
+
+    logger.info("FlowRunner consumer started successfully")
   }
   
   /**
-   * Execute a flow asynchronously
+   * Execute a single execution
    */
-  private def executeFlow(flow: Floww, statusChannel: ActorRef): Future[Unit] = {
-    // Save execution first
-    executionRepository.saveExecution(flow).flatMap { execution =>
-      val executionId = execution.id.getOrElse("unknown")
-      
-      statusChannel ! ExecutionStatusUpdate.createInfo(s"Starting flow execution with ID: $executionId")
-      
-      // Update status to in-progress
-      executionRepository.updateStatus(executionId, ExecutionStatus.InProgress).map { _ =>
-        // Execute steps with background support
-        val steps = flow.steps
-        executeFlowSteps(steps, statusChannel).map { successful =>
-          // Update execution status based on result
-          val finalStatus = if (successful) ExecutionStatus.Completed else ExecutionStatus.Failed
-          executionRepository.updateStatus(executionId, finalStatus)
+  override def executeFlow(execution: Execution): Future[Unit] = {
+    MetricUtils.withAsyncServiceMetrics(runnerName, "executeFlow") {
+      logger.info(s"Starting execution: ${execution.id}")
 
-          // Send completion message
-          val message = if (successful) s"Flow execution completed successfully" else "Flow execution failed"
-          statusChannel ! ExecutionStatusUpdate.createComplete(message)
+      // Update execution status to in-progress
+      publishExecutionUpdate(execution.id, "Execution started", ExecutionStatus.InProgress)
+      executionRepository.updateStatus(execution.id, ExecutionStatus.InProgress)
+
+      // Convert ExecutionSteps to FlowSteps for processing
+      val flowSteps = execution.steps.map(convertExecutionStepToFlowStep)
+
+      // Execute steps sequentially
+      executeFlowSteps(execution.id, flowSteps).map { successful =>
+        val finalStatus = if (successful) ExecutionStatus.Completed else ExecutionStatus.Failed
+        val message = if (successful) "Execution completed successfully" else "Execution failed"
+
+        // Update final status
+        publishExecutionUpdate(execution.id, message, finalStatus)
+        executionRepository.updateStatus(execution.id, finalStatus).map { _ =>
+          logger.info(s"Execution ${execution.id} completed with status: $finalStatus")
+
         }
+      }.recoverWith {
+        case e: Exception =>
+          logger.error(s"Execution ${execution.id} failed with exception: ${e.getMessage}", e)
+          publishExecutionUpdate(execution.id, s"Execution failed: ${e.getMessage}", ExecutionStatus.Failed)
+          executionRepository.updateStatus(execution.id, ExecutionStatus.Failed).map { _ =>
+            logger.info(s"Execution ${execution.id} completed with status: ${ExecutionStatus.Failed}")
+          }
+      }.map {_ =>
+        logger.info("")
       }
     }
   }
   
   /**
-   * Execute steps sequentially in order with background execution support
+   * Execute steps sequentially with Redis pub/sub updates
    */
-  private def executeFlowSteps(steps: List[FlowStep], statusChannel: ActorRef): Future[Boolean] = {
-    val promise = Promise[Boolean]()
-    
+  private def executeFlowSteps(executionId: String, steps: List[FlowStep]): Future[Boolean] = {
     // Tracks results of all completed steps by name
     val stepResults = MutableMap.empty[String, StepResponse]
-    
+
     // Tracks currently running background steps by name
     val backgroundSteps = MutableMap.empty[String, Future[StepResponse]]
 
     // Execute a single step and handle background behavior
     def executeStep(step: FlowStep): Future[StepResponse] = {
       logger.info(s"Executing step ${step.name} (background: ${step.runInBackground})")
+
+      // Publish step started update
+      publishStepUpdate(executionId, step.name, "Step started", StepStatus.TODO)
 
       // Find the appropriate runner for this step
       val runner = stepRunnerRegistry.getRunnerForStep(step.stepType)
@@ -145,29 +170,27 @@ class FlowRunnerImpl @Inject()(
       } else {
         val currentStep = remainingSteps.head
         val nextSteps = remainingSteps.tail
-        
+
         if (currentStep.runInBackground) {
           // Execute background step without waiting for it
           val stepFuture = executeStep(currentStep)
-          
+
           // Track the background step
           backgroundSteps += (currentStep.name -> stepFuture)
-          
+
           // Handle background step completion
           stepFuture.onComplete {
-            case Success(response) => {
-              statusChannel ! ExecutionStatusUpdate.createStepUpdate(response)
+            case Success(response) =>
+              publishStepUpdate(executionId, response.name, "Step completed", response.status)
               stepResults += (currentStep.name -> response)
               backgroundSteps -= currentStep.name
-              
+
               if (response.status == StepStatus.ERROR && !currentStep.continueOnSuccess) {
                 logger.error(s"Background step ${currentStep.name} failed with error status")
-                promise.trySuccess(false)
               }
-            }
-            case Failure(e) => {
+            case Failure(e) =>
               logger.error(s"Background step ${currentStep.name} failed: ${e.getMessage}", e)
-              
+
               val errorResponse = StepResponse(
                 name = currentStep.name,
                 id = currentStep.id.getOrElse(""),
@@ -178,25 +201,20 @@ class FlowRunnerImpl @Inject()(
                   actualValue = None
                 )
               )
-              
-              statusChannel ! ExecutionStatusUpdate.createStepUpdate(errorResponse)
+
+              publishStepUpdate(executionId, errorResponse.name, s"Step failed: ${e.getMessage}", StepStatus.ERROR)
               stepResults += (currentStep.name -> errorResponse)
               backgroundSteps -= currentStep.name
-              
-              if (!currentStep.continueOnSuccess) {
-                promise.trySuccess(false)
-              }
-            }
           }
-          
+
           // Continue processing next steps immediately
           processStepsSequentially(nextSteps)
         } else {
           // Execute regular step and wait for it to complete before proceeding
           executeStep(currentStep).flatMap { response =>
-            statusChannel ! ExecutionStatusUpdate.createStepUpdate(response)
+            publishStepUpdate(executionId, response.name, "Step completed", response.status)
             stepResults += (currentStep.name -> response)
-            
+
             if (response.status == StepStatus.ERROR && !currentStep.continueOnSuccess) {
               logger.error(s"Step ${currentStep.name} failed with error status, stopping flow")
               Future.successful(false)
@@ -205,9 +223,9 @@ class FlowRunnerImpl @Inject()(
               processStepsSequentially(nextSteps)
             }
           }.recoverWith {
-            case e: Exception => {
+            case e: Exception =>
               logger.error(s"Step ${currentStep.name} failed: ${e.getMessage}", e)
-              
+
               val errorResponse = StepResponse(
                 name = currentStep.name,
                 id = currentStep.id.getOrElse(""),
@@ -218,10 +236,10 @@ class FlowRunnerImpl @Inject()(
                   actualValue = None
                 )
               )
-              
-              statusChannel ! ExecutionStatusUpdate.createStepUpdate(errorResponse)
+
+              publishStepUpdate(executionId, errorResponse.name, s"Step failed: ${e.getMessage}", StepStatus.ERROR)
               stepResults += (currentStep.name -> errorResponse)
-              
+
               if (!currentStep.continueOnSuccess) {
                 // Stop flow execution on error
                 Future.successful(false)
@@ -230,21 +248,85 @@ class FlowRunnerImpl @Inject()(
                 logger.warn(s"Step ${currentStep.name} failed but continueOnSuccess=true, continuing flow")
                 processStepsSequentially(nextSteps)
               }
-            }
           }
         }
       }
     }
-    
+
     // Start processing steps sequentially
-    processStepsSequentially(steps).onComplete {
-      case Success(result) => promise.success(result)
-      case Failure(e) => {
-        logger.error(s"Error in flow execution: ${e.getMessage}", e)
-        promise.success(false)
-      }
-    }
-    
-    promise.future
+    processStepsSequentially(steps)
   }
-} 
+
+  /**
+   * Convert ExecutionStep to FlowStep for processing
+   */
+  private def convertExecutionStepToFlowStep(executionStep: ExecutionStep): FlowStep = {
+    FlowStep(
+      id = executionStep.id,
+      name = executionStep.name,
+      stepType = executionStep.stepType,
+      meta = executionStep.meta,
+      timeoutMs = executionStep.timeoutMs,
+      runInBackground = executionStep.runInBackground,
+      continueOnSuccess = executionStep.continueOnSuccess
+    )
+  }
+
+  /**
+   * Publish execution status update to Redis
+   */
+  private def publishExecutionUpdate(executionId: String, message: String, status: ExecutionStatus): Unit = {
+    Try {
+      val update = ExecutionStatusUpdate(
+        executionId = executionId,
+        updateType = ab.async.tester.domain.enums.ExecutionUpdateType.MESSAGE,
+        stepUpdate = None,
+        message = Some(message),
+        executionStatus = status
+      )
+
+      val jedis = redisClient.getPool.getResource
+      try {
+        val result = jedis.publish(redisChannel, update.asJson.noSpaces)
+        logger.info(s"Published execution update for $executionId: $message and result $result")
+      } finally {
+        jedis.close()
+      }
+    }.recover {
+      case e: Exception =>
+        logger.error(s"Failed to publish execution update for $executionId: ${e.getMessage}", e)
+    }
+  }
+
+  /**
+   * Publish step status update to Redis
+   */
+  private def publishStepUpdate(executionId: String, stepName: String, message: String, status: StepStatus): Unit = {
+    Try {
+      val stepUpdate = ab.async.tester.domain.execution.StepUpdate(
+        stepId = stepName,
+        status = status,
+        response = None
+      )
+
+      val update = ExecutionStatusUpdate(
+        executionId = executionId,
+        updateType = ab.async.tester.domain.enums.ExecutionUpdateType.STEP_UPDATE,
+        stepUpdate = Some(stepUpdate),
+        message = Some(message),
+        executionStatus = ExecutionStatus.InProgress // Default for step updates
+      )
+
+      val jedis = redisClient.getPool.getResource
+      try {
+        jedis.publish(redisChannel, update.asJson.noSpaces)
+        logger.debug(s"Published step update for $executionId/$stepName: $message")
+      } finally {
+        jedis.close()
+      }
+    }.recover {
+      case e: Exception =>
+        logger.error(s"Failed to publish step update for $executionId/$stepName: ${e.getMessage}", e)
+    }
+  }
+}

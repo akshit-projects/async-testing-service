@@ -44,13 +44,13 @@ class ExecutionTable(tag: Tag) extends Table[Execution](tag, "executions") {
     )
 
   def id           = column[String]("id", O.PrimaryKey, O.Default(java.util.UUID.randomUUID().toString))
-  def flowId           = column[String]("flowId")
-  def flowVersion      = column[Int]("flowVersion")
+  def flowId           = column[String]("flowid") // TODO fix casing of flowid
+  def flowVersion      = column[Int]("flowversion")
   def status       = column[ExecutionStatus]("status")
-  def startedAt       = column[Instant]("startedAt")
-  def completedAt       = column[Option[Instant]]("completedAt")
+  def startedAt       = column[Instant]("startedat")
+  def completedAt       = column[Option[Instant]]("completedat")
   def steps       =       column[String]("steps")
-  def updatedAt = column[Instant]("updatedAt")
+  def updatedAt = column[Instant]("updatedat")
   def parameters    = column[Option[String]]("parameters")
 
   def * = (id.?, flowId, flowVersion, status, startedAt, completedAt, steps, updatedAt, parameters) <> (

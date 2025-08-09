@@ -1,5 +1,9 @@
 package ab.async.tester.workers.app.runner
 
+import ab.async.tester.domain.enums.StepStatus
+import ab.async.tester.domain.step.{DelayStepMeta, FlowStep, StepResponse}
+import com.google.inject.{Inject, Singleton}
+
 import scala.concurrent.{ExecutionContext, Future}
 
 
@@ -18,7 +22,6 @@ class DelayStepRunner @Inject()(implicit ec: ExecutionContext) extends BaseStepR
       val delayStepMeta = meta match {
         case delayMeta: DelayStepMeta => delayMeta
         case _ =>
-
           logger.error(s"Invalid input for step: ${step.name} for step: $step")
           throw new Exception(s"Invalid input for step: ${step.name}")
       }

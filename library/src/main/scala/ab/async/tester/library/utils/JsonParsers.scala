@@ -20,7 +20,7 @@ object JsonParsers {
         decode[T](json.toString) match {
           case Right(t) => Right(t)
           case Left(e: ParsingFailure) => Left(BadRequest(Map("error" -> s"Malformed JSON: ${e.message}").asJsonNoSpaces))
-          case Left(e: DecodingFailure) => Left(BadRequest(Map("error" -> s"Invalid payload: ${e}").asJsonNoSpaces))
+          case Left(e: DecodingFailure) => Left(BadRequest(Map("error" -> s"Invalid payload: $e").asJsonNoSpaces))
           case Left(e) => Left(BadRequest(Map("error" -> s"Unknown JSON error: ${e.getMessage}").asJsonNoSpaces))
         }
       case None =>

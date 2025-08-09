@@ -11,7 +11,7 @@ case class ExecutionStep(
   id: Option[String],
   name: String,
   stepType: StepType,
-  meta: Option[StepMeta],
+  meta: StepMeta,
   timeoutMs: Int,
   runInBackground: Boolean = false,
   continueOnSuccess: Boolean = true,

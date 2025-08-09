@@ -119,7 +119,7 @@ class KafkaResourceCache @Inject()() {
       }
     }
     
-    logger.debug(s"Cache stats - Producers: ${producerCache.size}, Consumers: ${consumerCache.size}")
+//    logger.debug(s"Cache stats - Producers: ${producerCache.size}, Consumers: ${consumerCache.size}")
   }
   
   /**

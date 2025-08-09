@@ -22,7 +22,9 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import play.api.Configuration
 
 import java.time.Instant
+import scala.compat.java8.FutureConverters
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.FutureConverters._
 
 @Singleton
 class FlowExecutionServiceImpl @Inject()(
@@ -54,7 +56,19 @@ class FlowExecutionServiceImpl @Inject()(
     } yield {
       // Publish to Kafka for workers to pick up
       val kafkaPublisher = kafkaResourceCache.getOrCreateProducer(Constants.SystemKafkaResourceId, kafkaClient.getKafkaPublisher(kafkaConfig))
-      kafkaPublisher.send(new ProducerRecord[String, String](workerQueueTopic, execution.asJson.noSpaces))
+      val message = execution.asJson.noSpaces
+      val record = new ProducerRecord[String, String](workerQueueTopic, execution.id, message)
+
+      // Send message asynchronously and log the result
+      val sendFuture = Future { kafkaPublisher.send(record).get() }
+      sendFuture.onComplete {
+        case scala.util.Success(metadata) =>
+          println(s"✅ Message sent successfully to topic: ${metadata.topic()}, partition: ${metadata.partition()}, offset: ${metadata.offset()}")
+          println(s"📝 Message content: $message")
+        case scala.util.Failure(exception) =>
+          println(s"❌ Failed to send message to Kafka: ${exception.getMessage}")
+          exception.printStackTrace()
+      }
 
       // Return the execution instance directly
       execution

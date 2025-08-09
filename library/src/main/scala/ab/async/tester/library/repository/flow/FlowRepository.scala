@@ -2,7 +2,7 @@ package ab.async.tester.library.repository.flow
 
 import ab.async.tester.domain.flow.Floww
 import ab.async.tester.domain.step.FlowStep
-import ab.async.tester.library.utils.{MetricUtils}
+import ab.async.tester.library.utils.MetricUtils
 import com.google.inject.{ImplementedBy, Inject, Singleton}
 import io.circe.jawn.decode
 import io.circe.syntax.EncoderOps

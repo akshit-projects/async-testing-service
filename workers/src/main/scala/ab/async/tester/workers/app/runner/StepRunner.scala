@@ -1,8 +1,10 @@
 package ab.async.tester.workers.app.runner
 
-import ab.async.tester.domain.enums.StepType
-import ab.async.tester.domain.step.{FlowStep, StepResponse}
+import ab.async.tester.domain.enums.{StepStatus, StepType}
+import ab.async.tester.domain.step.{FlowStep, StepError, StepResponse, StepResponseValue}
+import ab.async.tester.library.utils.MetricUtils
 import com.google.inject.{ImplementedBy, Inject, Singleton}
+import play.api.Logger
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
@@ -56,17 +58,18 @@ class StepRunnerRegistryImpl @Inject()(
   
   private val runners = mutable.Map[String, StepRunner]()
   
-  // Register default runners with function constants matching Go implementation
-  registerRunner(StepFunctions.HTTP_API_STEP, httpStepRunner)
-  registerRunner(StepFunctions.DELAY_STEP, delayStepRunner)
-  registerRunner(StepFunctions.PUBLISH_KAFKA_MESSAGE_STEP, kafkaPublisherStepRunner)
-  registerRunner(StepFunctions.SUBSCRIBE_KAFKA_MESSAGES_STEP, kafkaConsumerStepRunner)
-  
+  // Register default runners by StepType
+  registerRunner(StepType.HttpRequest.toString, httpStepRunner)
+  registerRunner(StepType.Delay.toString, delayStepRunner)
+  registerRunner(StepType.KafkaPublish.toString, kafkaPublisherStepRunner)
+  registerRunner(StepType.KafkaSubscribe.toString, kafkaConsumerStepRunner)
+
   /**
    * Get a runner for a specific step function
    */
   override def getRunnerForStep(stepType: StepType): StepRunner = {
-    runners(stepType.toString.toLowerCase())
+    val key = stepType.toString.toLowerCase().replace("$", "")
+    runners.getOrElse(key, throw new IllegalArgumentException(s"No runner found for step type: $stepType"))
   }
   
   /**
