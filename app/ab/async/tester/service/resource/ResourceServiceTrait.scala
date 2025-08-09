@@ -1,7 +1,6 @@
 package ab.async.tester.service.resource
 
-import ab.async.tester.models.resource.ResourceConfig
-import ab.async.tester.models.requests.resource.GetResourcesRequest
+import ab.async.tester.domain.resource.ResourceConfig
 import com.google.inject.ImplementedBy
 
 import scala.concurrent.Future
@@ -14,7 +13,7 @@ trait ResourceServiceTrait {
    * @param request the filter criteria for resources
    * @return list of resource configs
    */
-  def getResources(request: GetResourcesRequest): Future[List[ResourceConfig]]
+  def getResources(typesOpt: Option[List[String]], groupOpt: Option[String], namespaceOpt: Option[String]): Future[List[ResourceConfig]]
   
   /**
    * Get a resource by ID

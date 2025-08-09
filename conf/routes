@@ -1,5 +1,5 @@
 GET     /api/v1/flows               ab.async.tester.controllers.FlowsController.getFlows
-GET     /api/v1/flows/run          ab.async.tester.controllers.FlowsController.runFlow()
+GET     /api/v1/flows/run          ab.async.tester.controllers.RunFlowController.runFlow()
 POST    /api/v1/flows/validate     ab.async.tester.controllers.FlowsController.validateFlow()
 GET     /api/v1/flows/:id          ab.async.tester.controllers.FlowsController.getFlow(id: String)
 POST    /api/v1/flows              ab.async.tester.controllers.FlowsController.addFlow()

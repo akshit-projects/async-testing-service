@@ -1,156 +1,96 @@
 package ab.async.tester.controllers
 
-import ab.async.tester.actors.WebSocketFlowActor
-import ab.async.tester.models.flow.Floww
-import ab.async.tester.models.requests.flow.GetFlowsRequest
+import ab.async.tester.domain.flow.Floww
+import ab.async.tester.library.utils.JsonParsers
 import ab.async.tester.service.flows.FlowServiceTrait
-import ab.async.tester.utils.{DecodingUtils, MetricUtils}
-import ab.async.tester.exceptions.ValidationException
-import ab.async.tester.models.response.GenericError
-import akka.actor.ActorSystem
-import akka.stream.scaladsl.{Flow, Keep, Sink, Source, Flow => AkkaFlow}
-import akka.stream.Materializer
-import com.google.inject.{Inject, Singleton}
-import io.circe.generic.auto._
+import ab.async.tester.library.utils.JsonParsers.ResultHelpers
 import io.circe.syntax._
+import io.circe.generic.auto._
 import play.api.Logger
-import play.api.mvc.{AbstractController, Action, AnyContent, ControllerComponents, WebSocket}
-import play.api.http.websocket.{Message, TextMessage}
-import play.api.libs.streams.ActorFlow
+import play.api.mvc._
 
+import javax.inject._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
 
 @Singleton
 class FlowsController @Inject()(
-  cc: ControllerComponents, 
-  flowService: FlowServiceTrait
-)(implicit ec: ExecutionContext, mat: Materializer, system: ActorSystem) extends AbstractController(cc) {
+                                 cc: ControllerComponents,
+                                 flowService: FlowServiceTrait
+                               )(implicit ec: ExecutionContext) extends AbstractController(cc) {
 
-  private implicit val logger: Logger = Logger(this.getClass)
+  private val logger = Logger(this.getClass)
 
+  /** GET /v1/flows?search=&limit=&page=&ids= */
   def getFlows: Action[AnyContent] = Action.async { implicit request =>
-    MetricUtils.withAsyncAPIMetrics("getFlows") {
-      // Extract query params directly or use empty request
-      val search = request.getQueryString("search")
-      val limit = request.getQueryString("limit").map(_.toInt).getOrElse(10)
-      val page = request.getQueryString("page").map(_.toInt).getOrElse(0)
-      val ids = request.getQueryString("ids").map(_.split(",").toList)
-      
-      val getFlowRequest = GetFlowsRequest(search, limit, page, ids)
-      
-      flowService.getFlows(getFlowRequest).map { flows =>
-        Ok(flows.asJson.noSpaces)
-      }
+    val search = request.getQueryString("search")
+    val limit  = request.getQueryString("limit").flatMap(s => scala.util.Try(s.toInt).toOption).getOrElse(10)
+    val page   = request.getQueryString("page").flatMap(s => scala.util.Try(s.toInt).toOption).getOrElse(0)
+    val ids    = request.getQueryString("ids").map(_.split(",").toList)
+
+    // keep controller thin
+    flowService.getFlows(search, ids, limit, page).map { flows =>
+      Ok(flows.asJson.noSpaces)
+    } recover {
+      case ex =>
+        logger.error("getFlows failed", ex)
+        InternalServerError(Map("error" -> "failed to fetch flows").asJsonNoSpaces)
     }
   }
-  
-  // Get a single flow by ID
+
+  /** GET /v1/flows/:id */
   def getFlow(id: String): Action[AnyContent] = Action.async { implicit request =>
-    MetricUtils.withAsyncAPIMetrics("getFlow") {
-      flowService.getFlow(id).map {
-        case Some(flow) => Ok(flow.asJson.noSpaces)
-        case None => NotFound(Map("message" -> s"Flow not found with ID: $id").asJson.noSpaces)
-      } recover {
-        case e: Exception =>
-          logger.error(s"Error getting flow $id: ${e.getMessage}", e)
-          InternalServerError(Map("message" -> "An unexpected error occurred").asJson.noSpaces)
-      }
+    flowService.getFlow(id).map {
+      case Some(flow) => Ok(flow.asJson.noSpaces)
+      case None       => NotFound(Map("error" -> s"Flow not found: $id").asJsonNoSpaces)
+    } recover {
+      case ex =>
+        logger.error(s"getFlow $id failed", ex)
+        InternalServerError(Map("error" -> "failed to fetch flow").asJsonNoSpaces)
     }
   }
 
-  // Route to add a new flow
+  /** POST /v1/flows */
   def addFlow(): Action[AnyContent] = Action.async { implicit request =>
-    MetricUtils.withAsyncAPIMetrics("addFlow") {
-      request.body.asJson match {
-        case Some(json) =>
-          val flow = DecodingUtils.decodeJsValue[Floww](json)
-          flowService.addFlow(flow).map { response =>
-            // Check if the flow was an existing one with the same name
-            if (flow.id.isDefined && flow.id.get != response.id.getOrElse("")) {
-              Ok(GenericError(s"Flow with name '${flow.name}' already exists") .asJson.noSpaces)
-            } else {
-              Created(response.asJson.noSpaces)
-            }
-          } recover {
-            case e: ValidationException =>
-              BadRequest(Map("message" -> e.getMessage).asJson.noSpaces)
-            case e: Exception =>
-              logger.error(s"Error adding flow: ${e.getMessage}", e)
-              InternalServerError(Map("message" -> "An unexpected error occurred").asJson.noSpaces)
+    JsonParsers.parseJsonBody[Floww](request)(implicitly, ec) match {
+      case Left(result) => Future.successful(result)
+      case Right(flow) =>
+        // validate minimal invariants
+        if (flow.steps.isEmpty) Future.successful(BadRequest(Map("error" -> "flow must have at least one step").asJsonNoSpaces))
+        else {
+          flowService.addFlow(flow).map { saved =>
+            Created(saved.asJson.noSpaces)
+          }.recover {
+            case ex =>
+              logger.error("addFlow failed", ex)
+              InternalServerError(Map("error" -> "failed to create flow").asJsonNoSpaces)
           }
-        case None =>
-          Future.successful(BadRequest(Map("message" -> "Missing request body").asJson.noSpaces))
-      }
+        }
     }
   }
-  
-  // Route to update an existing flow
+
+  /** PUT /v1/flows */
   def updateFlow(): Action[AnyContent] = Action.async { implicit request =>
-    MetricUtils.withAsyncAPIMetrics("updateFlow") {
-      request.body.asJson match {
-        case Some(json) =>
-          val flow = DecodingUtils.decodeJsValue[Floww](json)
-          
-          flowService.updateFlow(flow).map { success =>
-            if (success) {
-              Ok("")
-            } else {
-              NotFound(Map("message" -> "Flow not found or update failed").asJson.noSpaces)
-            }
-          } recover {
-            case e: ValidationException =>
-              BadRequest(Map("message" -> e.getMessage).asJson.noSpaces)
-            case e: Exception =>
-              logger.error(s"Error updating flow: ${e.getMessage}", e)
-              InternalServerError(Map("message" -> "An unexpected error occurred").asJson.noSpaces)
-          }
-        case None =>
-          Future.successful(BadRequest(Map("message" -> "Missing request body").asJson.noSpaces))
-      }
+    JsonParsers.parseJsonBody[Floww](request)(implicitly, ec) match {
+      case Left(result) => Future.successful(result)
+      case Right(flow) =>
+        flowService.updateFlow(flow).map {
+          case true => Ok(Map("status" -> "ok").asJsonNoSpaces)
+          case false => NotFound(Map("error" -> "flow not found").asJsonNoSpaces)
+        } recover {
+          case ex =>
+            logger.error("updateFlow failed", ex)
+            InternalServerError(Map("error" -> "failed to update flow").asJsonNoSpaces)
+        }
     }
   }
 
-  // Route to validate flow steps
+  /** POST /v1/flows/validate - validate flow steps */
   def validateFlow(): Action[AnyContent] = Action.async { implicit request =>
-    MetricUtils.withAsyncAPIMetrics("validateFlow") {
-      request.body.asJson match {
-        case Some(json) =>
-          val flow = DecodingUtils.decodeJsValue[Floww](json)
-          
-          Try(flowService.validateSteps(flow)) match {
-            case Success(_) => 
-              Future.successful(Ok(""))
-            case Failure(e: ValidationException) =>
-              Future.successful(BadRequest(Map("message" -> e.getMessage).asJson.noSpaces))
-            case Failure(e) =>
-              logger.error(s"Error validating flow: ${e.getMessage}", e)
-              Future.successful(InternalServerError(Map("message" -> "An unexpected error occurred").asJson.noSpaces))
-          }
-        case None =>
-          Future.successful(BadRequest(Map("message" -> "Missing request body").asJson.noSpaces))
-      }
-    }
-  }
-
-  // Route to run the flow
-  def runFlow(): WebSocket = {
-    WebSocket.accept[Message, Message] { request =>
-      logger.info(s"WebSocket connection established for flow execution")
-
-      val textFrameFlow = Flow[Message].collect {
-        case TextMessage(text) => text
-      }
-
-      val actorFlow = ActorFlow.actorRef[String, String] { out =>
-        WebSocketFlowActor.props(out, flowService)
-      }
-
-      val stringToMessageFlow = Flow[String].map(TextMessage.apply)
-
-      textFrameFlow
-        .via(actorFlow)
-        .via(stringToMessageFlow)
+    JsonParsers.parseJsonBody[Floww](request)(implicitly, ec) match {
+      case Left(result) => Future.successful(result)
+      case Right(flow) =>
+        flowService.validateSteps(flow)
+        Future.successful(Ok(Map("status" -> "valid").asJsonNoSpaces))
     }
   }
 }

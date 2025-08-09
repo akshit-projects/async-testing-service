@@ -1,10 +1,9 @@
 package ab.async.tester.service.resource
 
-import ab.async.tester.models.resource.ResourceConfig
-import ab.async.tester.models.requests.resource.GetResourcesRequest
-import ab.async.tester.repository.resource.ResourceRepository
-import ab.async.tester.metrics.MetricConstants
-import ab.async.tester.utils.MetricUtils
+import ab.async.tester.domain.resource.ResourceConfig
+import ab.async.tester.library.metrics.MetricConstants
+import ab.async.tester.library.repository.resource.ResourceRepository
+import ab.async.tester.library.utils.MetricUtils
 import com.google.inject.Inject
 import play.api.Logger
 
@@ -29,9 +28,9 @@ class ResourceServiceImpl @Inject()(
    * @param request the filter criteria for resources
    * @return list of resource configs
    */
-  override def getResources(request: GetResourcesRequest): Future[List[ResourceConfig]] = {
+  override def getResources(typesOpt: Option[List[String]], groupOpt: Option[String], namespaceOpt: Option[String]): Future[List[ResourceConfig]] = {
     MetricUtils.withAsyncServiceMetrics(serviceName, "getResources") {
-        resourceRepository.findAll(request).recover {
+        resourceRepository.findAll(typesOpt, groupOpt, namespaceOpt).recover {
           case e: Exception =>
             logger.error(s"Error retrieving resources: ${e.getMessage}", e)
             List.empty
