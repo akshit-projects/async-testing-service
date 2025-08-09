@@ -40,12 +40,22 @@ class FlowRepositoryImpl @Inject()(
     def name        = column[String]("name")
     def description = column[Option[String]]("description")
     def creator     = column[String]("creator")
-    def steps       = column[List[FlowStep]]("steps")
+    def steps       = column[String]("steps")
     def createdAt   = column[Long]("created_at")
     def modifiedAt  = column[Long]("modified_at")
     def version     = column[Int]("flow_version")
 
-    def * = (id, name, description, creator, steps, createdAt, modifiedAt, version) <> ((Floww.apply _).tupled, Floww.unapply)
+    def * = (id, name, description, creator, steps, createdAt, modifiedAt, version) <> (
+      {
+        case (id, name, description, creator, steps, createdAt, modifiedAt, version) =>
+          val stepsObj = decode[List[FlowStep]](steps).getOrElse(Nil)
+          Floww(id, name, description, creator, stepsObj, createdAt, modifiedAt, version)
+      },
+      (f: Floww) => {
+        val stepsStr = f.steps.asJson.noSpaces
+        Some((f.id, f.name, f.description, f.creator, stepsStr, f.createdAt, f.modifiedAt, f.version))
+      }
+    )
   }
 
   private val flows = TableQuery[FlowTable]

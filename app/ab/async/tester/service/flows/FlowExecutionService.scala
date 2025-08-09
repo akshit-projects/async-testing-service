@@ -4,6 +4,7 @@ import ab.async.tester.domain.execution.Execution
 import ab.async.tester.domain.requests.RunFlowRequest
 import akka.NotUsed
 import akka.stream.scaladsl.{Source, SourceQueueWithComplete}
+import com.google.inject.ImplementedBy
 import io.circe.Json
 
 import scala.concurrent.Future
@@ -14,6 +15,7 @@ case class ExecutionStreams(
                              executionId: String
                            )
 
+@ImplementedBy(classOf[FlowExecutionServiceImpl])
 trait FlowExecutionService {
   /**
    * Creates execution and publishes to Kafka for workers to pick up.

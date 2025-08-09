@@ -38,29 +38,22 @@ class FlowServiceImpl @Inject()(
   override def addFlow(flow: Floww): Future[Floww] =
     MetricUtils.withAsyncServiceMetrics(serviceName, "addFlow") {
       validateSteps(flow)
-      val existingFlowFuture = flowRepository.findByName(flow.name)
-      existingFlowFuture.flatMap {
-        case None =>
-          val now = System.currentTimeMillis() / 1000
-          val newFlow = flow.copy(createdAt = now, modifiedAt = now)
-          for {
-            createdFlow <- flowRepository.insert(newFlow)
-            // Create initial version record
-            flowVersion = FlowVersion(
-              flowId = createdFlow.id.get,
-              version = 1,
-              steps = createdFlow.steps,
-              createdAt = now,
-              createdBy = flow.creator,
-              description = flow.description
-            )
-            _ <- flowVersionRepository.insert(flowVersion)
-          } yield {
-            logger.info(s"Created new flow: ${createdFlow.id.getOrElse("")} - ${createdFlow.name} with initial version")
-            createdFlow
-          }
-        case Some(existing) =>
-          Future.failed(ValidationException(s"Flow with name '${flow.name}' already exists (id=${existing.id.getOrElse("")})"))
+      val now = System.currentTimeMillis() / 1000
+      val newFlow = flow.copy(createdAt = now, modifiedAt = now)
+      for {
+        createdFlow <- flowRepository.insert(newFlow)
+        // Create initial version record
+        flowVersion = FlowVersion(
+          flowId = createdFlow.id.get,
+          version = 1,
+          steps = createdFlow.steps,
+          createdAt = now,
+          createdBy = flow.creator,
+          description = flow.description
+        )
+        _ <- flowVersionRepository.insert(flowVersion)
+      } yield {
+        createdFlow
       }
     }
 

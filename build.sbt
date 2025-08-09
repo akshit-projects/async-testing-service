@@ -3,12 +3,28 @@ ThisBuild / scalaVersion := "2.13.16"
 
 version := "1.0"
 
-lazy val circeVersion = "0.14.14"
+// Global dependency resolution strategy
+ThisBuild / conflictManager := ConflictManager.latestRevision
+ThisBuild / updateOptions := updateOptions.value.withGigahorse(false)
 
+lazy val circeVersion = "0.14.14"
+lazy val jacksonVersion = "2.14.3"
+
+// Force Jackson version compatibility
 libraryDependencies ++= Seq(
   ws,
   filters,
-  
+
+  // Database dependencies for main app
+  "com.typesafe.play" %% "play-slick" % "5.1.0",
+  "com.typesafe.play" %% "play-slick-evolutions" % "5.1.0",
+
+  // Force compatible Jackson versions
+  "com.fasterxml.jackson.core" % "jackson-core" % jacksonVersion,
+  "com.fasterxml.jackson.core" % "jackson-databind" % jacksonVersion,
+  "com.fasterxml.jackson.core" % "jackson-annotations" % jacksonVersion,
+  "com.fasterxml.jackson.module" %% "jackson-module-scala" % jacksonVersion,
+
   // Testing dependencies
   "org.scalatestplus.play" %% "scalatestplus-play" % "7.0.1" % Test
 )
@@ -25,10 +41,12 @@ lazy val circeDeps = Seq(
 lazy val domainDeps = circeDeps
 
 
+lazy val akkaVersion = "2.6.20"
+
 lazy val workerDeps = Seq(
-  "com.typesafe.akka" %% "akka-stream" % "2.6.20",
+  "com.typesafe.akka" %% "akka-stream" % akkaVersion,
   "com.typesafe.akka" %% "akka-stream-kafka" % "3.0.0",
-  "com.typesafe.akka" %% "akka-actor-typed" % "2.6.20",
+  "com.typesafe.akka" %% "akka-actor-typed" % akkaVersion,
   guice
 ) ++ circeDeps
 
@@ -61,11 +79,25 @@ lazy val library = (project in file("library"))
 lazy val workers = (project in file("workers"))
   .settings(
     name := "AsyncTesterWorkers",
-    libraryDependencies ++= workerDeps
+    libraryDependencies ++= workerDeps,
+    // Force Jackson version resolution for workers
+    dependencyOverrides ++= Seq(
+      "com.fasterxml.jackson.core" % "jackson-core" % jacksonVersion,
+      "com.fasterxml.jackson.core" % "jackson-databind" % jacksonVersion,
+      "com.fasterxml.jackson.core" % "jackson-annotations" % jacksonVersion,
+      "com.fasterxml.jackson.module" %% "jackson-module-scala" % jacksonVersion
+    )
   ).dependsOn(library)
 
 
 lazy val root = (project in file("."))
   .settings(
-    name := "AsyncTester"
+    name := "AsyncTester",
+    // Force Jackson version resolution
+    dependencyOverrides ++= Seq(
+      "com.fasterxml.jackson.core" % "jackson-core" % jacksonVersion,
+      "com.fasterxml.jackson.core" % "jackson-databind" % jacksonVersion,
+      "com.fasterxml.jackson.core" % "jackson-annotations" % jacksonVersion,
+      "com.fasterxml.jackson.module" %% "jackson-module-scala" % jacksonVersion
+    )
   ).dependsOn(library).enablePlugins(PlayScala)

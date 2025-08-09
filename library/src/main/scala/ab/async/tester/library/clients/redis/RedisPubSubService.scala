@@ -4,7 +4,9 @@ import io.circe.generic.auto._
 import ab.async.tester.domain.execution.ExecutionStatusUpdate
 import ab.async.tester.library.cache.{KafkaResourceCache, RedisClient}
 import ab.async.tester.library.clients.events.KafkaClient
+import ab.async.tester.library.ec.RedisPubSubExecutorPool
 import akka.stream.scaladsl.SourceQueueWithComplete
+import com.google.inject.{Inject, Singleton}
 import io.circe.parser
 import io.circe.syntax.EncoderOps
 import play.api.Configuration
@@ -13,9 +15,12 @@ import redis.clients.jedis.JedisPubSub
 import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.{ExecutionContext, Future}
 
-class RedisPubSubService(redisClient: RedisClient, kafkaResourceCache: KafkaResourceCache, kafkaClient: KafkaClient, configuration: Configuration)(implicit ec: ExecutionContext) {
+@Singleton
+class RedisPubSubService @Inject()(redisClient: RedisClient)(implicit ec: ExecutionContext) {
   private val pool = redisClient.getPool
   private val queues = new ConcurrentHashMap[String, SourceQueueWithComplete[io.circe.Json]]()
+
+  startSubscription("internal-executions-topic")(RedisPubSubExecutorPool.getExecutionContext)
 
   private val sub = new JedisPubSub() {
     override def onMessage(channel: String, message: String): Unit = {
@@ -29,13 +34,23 @@ class RedisPubSubService(redisClient: RedisClient, kafkaResourceCache: KafkaReso
     }
   }
 
-  def startSubscription(channel: String)(implicit blockingEc: ExecutionContext): Unit = Future {
+  private def startSubscription(channel: String)(blockingEc: ExecutionContext): Unit = Future {
     val j = pool.getResource
     try j.subscribe(sub, channel)
     finally j.close()
   }(blockingEc)
 
-  def registerQueue(executionId: String, queue: SourceQueueWithComplete[io.circe.Json]): Unit = queues.put(executionId, queue)
-  def unregisterQueue(executionId: String): Unit = { val q = queues.remove(executionId); if (q != null) q.complete() }
-  def close(): Unit = { sub.unsubscribe(); pool.close() }
+  def registerQueue(executionId: String, queue: SourceQueueWithComplete[io.circe.Json]): Unit = {
+    queues.put(executionId, queue)
+  }
+
+  def unregisterQueue(executionId: String): Unit = {
+    val q = queues.remove(executionId)
+    if (q != null) q.complete()
+  }
+
+  def close(): Unit = {
+    sub.unsubscribe()
+    pool.close()
+  }
 }

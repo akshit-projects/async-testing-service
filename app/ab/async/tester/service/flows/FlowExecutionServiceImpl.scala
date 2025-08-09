@@ -7,7 +7,6 @@ import ab.async.tester.domain.enums.StepStatus.TODO
 import ab.async.tester.domain.execution.{Execution, ExecutionStep}
 import ab.async.tester.domain.flow.Floww
 import ab.async.tester.domain.requests.RunFlowRequest
-
 import ab.async.tester.library.cache.KafkaResourceCache
 import ab.async.tester.library.clients.events.KafkaClient
 import ab.async.tester.library.clients.redis.RedisPubSubService
@@ -15,6 +14,7 @@ import ab.async.tester.library.repository.execution.ExecutionRepository
 import akka.NotUsed
 import akka.stream.{Materializer, OverflowStrategy}
 import akka.stream.scaladsl.Source
+import com.google.inject.{Inject, Singleton}
 import com.typesafe.config.Config
 import io.circe.Json
 import io.circe.syntax.EncoderOps
@@ -24,7 +24,8 @@ import play.api.Configuration
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
 
-class FlowExecutionServiceImpl(
+@Singleton
+class FlowExecutionServiceImpl @Inject()(
                                 executionRepository: ExecutionRepository,
                                 redisPubSubService: RedisPubSubService,
                                 kafkaResourceCache: KafkaResourceCache,
