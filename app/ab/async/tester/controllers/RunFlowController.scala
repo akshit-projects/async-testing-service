@@ -19,7 +19,7 @@ class RunFlowController @Inject()(
                                    flowExecService: FlowExecutionService,
                                 )(implicit ec: ExecutionContext) extends AbstractController(cc) {
 
-  def runFlow: WebSocket = WebSocket.acceptOrResult[String, String] { _ =>
+  def runFlow(): WebSocket = WebSocket.acceptOrResult[String, String] { _ =>
     Future.successful(Right(handleWebSocket()))
   }
 

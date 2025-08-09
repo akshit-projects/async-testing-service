@@ -1,9 +1,14 @@
 package ab.async.tester.library.repository.flow
 
 import ab.async.tester.domain.flow.Floww
+import ab.async.tester.domain.step.FlowStep
 import ab.async.tester.library.utils.{MetricUtils}
 import com.google.inject.{ImplementedBy, Inject, Singleton}
+import io.circe.jawn.decode
+import io.circe.syntax.EncoderOps
 import play.api.Logger
+import slick.ast.BaseTypedType
+import slick.jdbc.JdbcType
 
 import scala.concurrent.{ExecutionContext, Future}
 import slick.jdbc.PostgresProfile.api._
@@ -26,14 +31,21 @@ class FlowRepositoryImpl @Inject()(
   private val repositoryName = "FlowRepository"
 
   class FlowTable(tag: Tag) extends Table[Floww](tag, "flows") {
+    implicit val stepsColumnType: JdbcType[List[FlowStep]] with BaseTypedType[List[FlowStep]] = MappedColumnType.base[List[FlowStep], String](
+      steps => steps.asJson.noSpaces,               // write as JSON
+      str   => decode[List[FlowStep]](str).getOrElse(Nil) // read from JSON
+    )
+
     def id          = column[Option[String]]("id", O.PrimaryKey)
     def name        = column[String]("name")
     def description = column[Option[String]]("description")
     def creator     = column[String]("creator")
+    def steps       = column[List[FlowStep]]("steps")
     def createdAt   = column[Long]("created_at")
     def modifiedAt  = column[Long]("modified_at")
+    def version     = column[Int]("flow_version")
 
-    def * = (id, name, description, creator, createdAt, modifiedAt) <> ((Floww.apply _).tupled, Floww.unapply)
+    def * = (id, name, description, creator, steps, createdAt, modifiedAt, version) <> ((Floww.apply _).tupled, Floww.unapply)
   }
 
   private val flows = TableQuery[FlowTable]

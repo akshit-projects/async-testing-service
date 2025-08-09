@@ -45,7 +45,7 @@ class ExecutionTable(tag: Tag) extends Table[Execution](tag, "executions") {
 
   def id           = column[String]("id", O.PrimaryKey, O.Default(java.util.UUID.randomUUID().toString))
   def flowId           = column[String]("flowId")
-  def flowVersion           = column[Int]("flowId")
+  def flowVersion      = column[Int]("flowVersion")
   def status       = column[ExecutionStatus]("status")
   def startedAt       = column[Instant]("startedAt")
   def completedAt       = column[Option[Instant]]("completedAt")

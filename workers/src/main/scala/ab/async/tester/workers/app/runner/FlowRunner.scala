@@ -21,7 +21,7 @@ import scala.util.{Failure, Success}
 trait FlowRunner {
   /**
    * Run a flow with steps
-   * 
+   *
    * @param flow the flow to run
    * @return a Source of status updates from the flow execution
    */

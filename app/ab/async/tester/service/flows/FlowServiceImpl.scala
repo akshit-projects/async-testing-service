@@ -18,18 +18,17 @@ import scala.util.{Failure, Success, Try}
 @Singleton
 class FlowServiceImpl @Inject()(
                                  flowRepository: FlowRepository,
-                                 flowVersionRepository: FlowVersionRepository,
-                                 flowRunner: FlowRunner
+                                 flowVersionRepository: FlowVersionRepository
                                )(implicit ec: ExecutionContext) extends FlowServiceTrait {
 
   private implicit val logger: Logger = Logger(this.getClass)
   private val serviceName = "FlowService"
 
-  override def validateSteps(steps: List[FlowStep]): Unit =
+  override def validateSteps(flow: Floww): Unit =
     MetricUtils.withServiceMetrics(serviceName, "validateSteps") {
-      if (steps.isEmpty) throw ValidationException("Flow must have at least one step")
+      if (flow.steps.isEmpty) throw ValidationException("Flow must have at least one step")
 
-      val stepNames = steps.map(_.name)
+      val stepNames = flow.steps.map(_.name)
       if (stepNames.distinct.length != stepNames.length) {
         val duplicates = stepNames.groupBy(identity).collect { case (n, dups) if dups.size > 1 => n }
         throw ValidationException(s"Duplicate step names found: ${duplicates.mkString(", ")}")
@@ -40,17 +39,29 @@ class FlowServiceImpl @Inject()(
     MetricUtils.withAsyncServiceMetrics(serviceName, "addFlow") {
       validateSteps(flow)
       val existingFlowFuture = flowRepository.findByName(flow.name)
-      existingFlowFuture.map {
+      existingFlowFuture.flatMap {
         case None =>
           val now = System.currentTimeMillis() / 1000
           val newFlow = flow.copy(createdAt = now, modifiedAt = now)
-          flowRepository.insert(newFlow).map { created =>
-            logger.info(s"Created new flow: ${created.id.getOrElse("")} - ${created.name}")
-            created
+          for {
+            createdFlow <- flowRepository.insert(newFlow)
+            // Create initial version record
+            flowVersion = FlowVersion(
+              flowId = createdFlow.id.get,
+              version = 1,
+              steps = createdFlow.steps,
+              createdAt = now,
+              createdBy = flow.creator,
+              description = flow.description
+            )
+            _ <- flowVersionRepository.insert(flowVersion)
+          } yield {
+            logger.info(s"Created new flow: ${createdFlow.id.getOrElse("")} - ${createdFlow.name} with initial version")
+            createdFlow
           }
         case Some(existing) =>
           Future.failed(ValidationException(s"Flow with name '${flow.name}' already exists (id=${existing.id.getOrElse("")})"))
-      }.flatten
+      }
     }
 
   override def getFlows(search: Option[String], flowIds: Option[List[String]], limit: Int, page: Int): Future[List[Floww]] =
@@ -71,17 +82,53 @@ class FlowServiceImpl @Inject()(
       }
     }
 
+  override def getFlowVersions(flowId: String): Future[List[FlowVersion]] =
+    MetricUtils.withAsyncServiceMetrics(serviceName, "getFlowVersions") {
+      flowVersionRepository.findByFlowId(flowId)
+    }
+
+  override def getFlowVersion(flowId: String, version: Int): Future[Option[FlowVersion]] =
+    MetricUtils.withAsyncServiceMetrics(serviceName, "getFlowVersion") {
+      flowVersionRepository.findByFlowIdAndVersion(flowId, version)
+    }
+
   override def updateFlow(flow: Floww): Future[Boolean] =
     MetricUtils.withAsyncServiceMetrics(serviceName, "updateFlow") {
       validateSteps(flow)
-      val updated = flow.copy(modifiedAt = System.currentTimeMillis() / 1000)
-      flowRepository.update(updated).map {
-        case true =>
-          logger.info(s"Flow updated: ${flow.id.getOrElse("")}")
-          true
-        case false =>
-          logger.warn(s"Flow update failed: ${flow.id.getOrElse("")}")
-          false
-      }
+      for {
+        existingFlowOpt <- flowRepository.findById(flow.id.getOrElse(""))
+        result <- existingFlowOpt match {
+          case Some(existingFlow) =>
+            val nextVersion = existingFlow.version + 1
+            val now = System.currentTimeMillis() / 1000
+            val updatedFlow = flow.copy(modifiedAt = now, version = nextVersion)
+            val flowVersion = FlowVersion(
+              flowId = flow.id.get,
+              version = nextVersion,
+              steps = flow.steps,
+              createdAt = now,
+              createdBy = flow.creator,
+              description = flow.description
+            )
+
+            for {
+              // Create version record for the new version
+
+              _ <- flowVersionRepository.insert(flowVersion)
+              // Update the main flow record
+              updateResult <- flowRepository.update(updatedFlow)
+            } yield {
+              if (updateResult) {
+                logger.info(s"Flow updated: ${flow.id.getOrElse("")} to version $nextVersion")
+              } else {
+                logger.warn(s"Flow update failed: ${flow.id.getOrElse("")}")
+              }
+              updateResult
+            }
+          case None =>
+            logger.warn(s"Flow not found for update: ${flow.id.getOrElse("")}")
+            Future.successful(false)
+        }
+      } yield result
     }
 }

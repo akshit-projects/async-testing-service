@@ -10,8 +10,10 @@ case class Floww(
                   name: String,
                   description: Option[String] = None,
                   creator: String,
+                  steps: List[FlowStep],
                   createdAt: Long,
-                  modifiedAt: Long
+                  modifiedAt: Long,
+                  version: Int
                 )
 
 object Floww {

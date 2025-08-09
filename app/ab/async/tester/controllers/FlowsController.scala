@@ -2,10 +2,10 @@ package ab.async.tester.controllers
 
 import ab.async.tester.domain.flow.Floww
 import ab.async.tester.library.utils.JsonParsers
-import ab.async.tester.service.flows.FlowServiceTrait
 import ab.async.tester.library.utils.JsonParsers.ResultHelpers
-import io.circe.syntax._
+import ab.async.tester.service.flows.FlowServiceTrait
 import io.circe.generic.auto._
+import io.circe.syntax._
 import play.api.Logger
 import play.api.mvc._
 
@@ -91,6 +91,29 @@ class FlowsController @Inject()(
       case Right(flow) =>
         flowService.validateSteps(flow)
         Future.successful(Ok(Map("status" -> "valid").asJsonNoSpaces))
+    }
+  }
+
+  /** GET /v1/flows/:flowId/versions - get all versions of a flow */
+  def getFlowVersions(flowId: String): Action[AnyContent] = Action.async { implicit request =>
+    flowService.getFlowVersions(flowId).map { versions =>
+      Ok(versions.asJson.noSpaces)
+    } recover {
+      case ex =>
+        logger.error(s"getFlowVersions $flowId failed", ex)
+        InternalServerError(Map("error" -> "failed to fetch flow versions").asJsonNoSpaces)
+    }
+  }
+
+  /** GET /v1/flows/:flowId/versions/:version - get a specific version of a flow */
+  def getFlowVersion(flowId: String, version: Int): Action[AnyContent] = Action.async { implicit request =>
+    flowService.getFlowVersion(flowId, version).map {
+      case Some(flowVersion) => Ok(flowVersion.asJson.noSpaces)
+      case None => NotFound(Map("error" -> s"Flow version not found: $flowId v$version").asJsonNoSpaces)
+    } recover {
+      case ex =>
+        logger.error(s"getFlowVersion $flowId v$version failed", ex)
+        InternalServerError(Map("error" -> "failed to fetch flow version").asJsonNoSpaces)
     }
   }
 }

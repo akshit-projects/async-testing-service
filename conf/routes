@@ -1,9 +1,11 @@
-GET     /api/v1/flows               ab.async.tester.controllers.FlowsController.getFlows
-GET     /api/v1/flows/run          ab.async.tester.controllers.RunFlowController.runFlow()
-POST    /api/v1/flows/validate     ab.async.tester.controllers.FlowsController.validateFlow()
-GET     /api/v1/flows/:id          ab.async.tester.controllers.FlowsController.getFlow(id: String)
-POST    /api/v1/flows              ab.async.tester.controllers.FlowsController.addFlow()
-PUT     /api/v1/flows              ab.async.tester.controllers.FlowsController.updateFlow()
+GET     /api/v1/flows                           ab.async.tester.controllers.FlowsController.getFlows
+GET     /api/v1/flows/run                      ab.async.tester.controllers.RunFlowController.runFlow()
+POST    /api/v1/flows/validate                 ab.async.tester.controllers.FlowsController.validateFlow()
+GET     /api/v1/flows/:id                      ab.async.tester.controllers.FlowsController.getFlow(id: String)
+GET     /api/v1/flows/:flowId/versions         ab.async.tester.controllers.FlowsController.getFlowVersions(flowId: String)
+GET     /api/v1/flows/:flowId/versions/:version ab.async.tester.controllers.FlowsController.getFlowVersion(flowId: String, version: Int)
+POST    /api/v1/flows                          ab.async.tester.controllers.FlowsController.addFlow()
+PUT     /api/v1/flows                          ab.async.tester.controllers.FlowsController.updateFlow()
 
 
 # Resource endpoints
