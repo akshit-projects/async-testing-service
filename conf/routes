@@ -1,11 +1,11 @@
 GET     /api/v1/flows                           ab.async.tester.controllers.FlowsController.getFlows
+POST    /api/v1/flows                          ab.async.tester.controllers.FlowsController.addFlow()
+PUT     /api/v1/flows                          ab.async.tester.controllers.FlowsController.updateFlow()
 POST    /api/v1/flows/run                      ab.async.tester.controllers.RunFlowController.runFlow()
 POST    /api/v1/flows/validate                 ab.async.tester.controllers.FlowsController.validateFlow()
 GET     /api/v1/flows/:id                      ab.async.tester.controllers.FlowsController.getFlow(id: String)
 GET     /api/v1/flows/:flowId/versions         ab.async.tester.controllers.FlowsController.getFlowVersions(flowId: String)
 GET     /api/v1/flows/:flowId/versions/:version ab.async.tester.controllers.FlowsController.getFlowVersion(flowId: String, version: Int)
-POST    /api/v1/flows                          ab.async.tester.controllers.FlowsController.addFlow()
-PUT     /api/v1/flows                          ab.async.tester.controllers.FlowsController.updateFlow()
 
 # Execution endpoints
 GET     /api/v1/executions/:executionId        ab.async.tester.controllers.ExecutionController.getExecution(executionId: String)
@@ -21,3 +21,6 @@ DELETE  /api/v1/resources/:id      ab.async.tester.controllers.ResourceControlle
 
 # Metrics endpoint
 GET     /metrics                   ab.async.tester.controllers.MetricsController.metrics
+
+# Auth endpoint
+POST     /api/v1/login                   ab.async.tester.controllers.AuthController.loginUser

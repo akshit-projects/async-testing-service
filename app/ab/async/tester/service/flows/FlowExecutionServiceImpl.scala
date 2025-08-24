@@ -3,7 +3,7 @@ package ab.async.tester.service.flows
 import ab.async.tester.constants.Constants
 import ab.async.tester.domain.clients.kafka.KafkaConfig
 import ab.async.tester.domain.enums.ExecutionStatus
-import ab.async.tester.domain.enums.StepStatus.TODO
+import ab.async.tester.domain.enums.StepStatus.IN_PROGRESS
 import ab.async.tester.domain.execution.{Execution, ExecutionStep}
 import ab.async.tester.domain.flow.Floww
 import ab.async.tester.domain.requests.RunFlowRequest
@@ -101,7 +101,7 @@ class FlowExecutionServiceImpl @Inject()(
         timeoutMs = step.timeoutMs,
         runInBackground = step.runInBackground,
         continueOnSuccess = step.continueOnSuccess,
-        status = TODO,
+        status = IN_PROGRESS,
         startedAt = now,
         logs = List.empty,
         response = None

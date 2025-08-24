@@ -11,9 +11,9 @@ case class Floww(
                   description: Option[String] = None,
                   creator: String,
                   steps: List[FlowStep],
-                  createdAt: Long,
-                  modifiedAt: Long,
-                  version: Int
+                  createdAt: Long = System.currentTimeMillis(),
+                  modifiedAt: Long = System.currentTimeMillis(),
+                  version: Int = 1
                 )
 
 object Floww {

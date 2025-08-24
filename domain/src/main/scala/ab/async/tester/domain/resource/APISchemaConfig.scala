@@ -6,6 +6,7 @@ import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 case class APISchemaConfig(id: String,
                            `namespace`: Option[String],
                            group: Option[String],
+                           `type`: String,
                            name: String,
                            url: String,
                            method: String,
@@ -15,7 +16,7 @@ case class APISchemaConfig(id: String,
   extends ResourceConfig {
   override def getId: String = id
 
-  override def getType: String = "api-schema"
+  override def getType: String = "http"
 
   override def setId(newId: String): ResourceConfig = this.copy(id = newId)
 }

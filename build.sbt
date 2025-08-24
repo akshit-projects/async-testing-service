@@ -35,9 +35,11 @@ libraryDependencies ++= Seq(
   "com.fasterxml.jackson.core" % "jackson-databind" % jacksonVersion,
   "com.fasterxml.jackson.core" % "jackson-annotations" % jacksonVersion,
   "com.fasterxml.jackson.module" %% "jackson-module-scala" % jacksonVersion,
+  "com.github.jwt-scala" %% "jwt-play-json" % "11.0.2",
 
-  // Testing dependencies
-  "org.scalatestplus.play" %% "scalatestplus-play" % "7.0.1" % Test
+
+// Testing dependencies
+  "org.scalatestplus.play" %% "scalatestplus-play" % "7.0.1" % Test,
 )
 
 // If you use Flyway for DB migrations

@@ -5,6 +5,7 @@ import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 case class SQLDBConfig(id: String,
                        `namespace`: Option[String],
                        group: Option[String],
+                       `type`: String,
                        name: String,
                        dbUrl: String,
                        username: String,

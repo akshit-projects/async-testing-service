@@ -47,7 +47,7 @@ class KafkaPublisherStepRunner @Inject()(
           case _ =>
             throw new IllegalStateException(s"The resourceId is not valid for step: ${step.name}")
         }
-        if (kafkaConfig.brokerList.isEmpty) {
+        if (kafkaConfig.brokersList.isEmpty) {
           throw new IllegalArgumentException("Bootstrap servers are required for Kafka publisher")
         }
 
@@ -61,7 +61,7 @@ class KafkaPublisherStepRunner @Inject()(
 
         // Create Kafka producer configuration
         val kc = KafkaConfig(
-          bootstrapServers = kafkaConfig.brokerList,
+          bootstrapServers = kafkaConfig.brokersList,
           otherConfig = kafkaConfig.config.getOrElse(Map.empty)
         )
 
@@ -131,7 +131,7 @@ class KafkaConsumerStepRunner @Inject()(
           return Future.failed(new IllegalStateException(s"The resourceId is not valid for step: ${step.name}"))
       }
 
-      if (kafkaConfig.brokerList.isEmpty) {
+      if (kafkaConfig.brokersList.isEmpty) {
         return Future.failed(new IllegalArgumentException("Bootstrap servers are required for Kafka consumer"))
       }
 
@@ -336,7 +336,7 @@ class KafkaConsumerStepRunner @Inject()(
   
   private def createConsumerProps(kafkaMeta: KafkaSubscribeMeta, kafkaConfig: KafkaResourceConfig): Properties = {
     val props = new Properties()
-    props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaConfig.brokerList)
+    props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaConfig.brokersList)
     props.put(ConsumerConfig.GROUP_ID_CONFIG, kafkaMeta.groupId)
     props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, classOf[StringDeserializer].getName)
     props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, classOf[StringDeserializer].getName)

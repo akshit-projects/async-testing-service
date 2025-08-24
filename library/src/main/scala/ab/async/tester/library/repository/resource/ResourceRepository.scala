@@ -28,18 +28,19 @@ trait ResourceRepository {
 class ResourceConfigTable(tag: Tag) extends Table[ResourceConfig](tag, "resource_configs") {
   def id = column[String]("id", O.PrimaryKey)
   def name = column[String]("name")
+  def `type` = column[String]("type")
   def group = column[Option[String]]("group")
   def namespace = column[Option[String]]("namespace")
   def payload = column[String]("payload_json")
 
   def * : ProvenShape[ResourceConfig] =
-    (id, name, group, namespace, payload).<>(
+    (id, name, group, namespace, `type`, payload).<>(
       // Apply
-      { case (id, name, g, ns, p) =>
+      { case (id, name, g, ns, t, p) =>
         ResourceConfig.fromDb(p)
       },
       // Unapply
-      (rc: ResourceConfig) => Some((rc.getId, rc.getType, rc.group, rc.getNamespace, rc.asJson.noSpaces))
+      (rc: ResourceConfig) => Some((rc.getId, rc.getType, rc.group, rc.getNamespace, rc.getType, rc.asJson.noSpaces))
     )
 }
 
@@ -61,7 +62,7 @@ class ResourceRepositoryImpl @Inject()(db: Database)(implicit ec: ExecutionConte
     MetricUtils.withAsyncRepositoryMetrics(repositoryName, "findAll") {
       var query = table.map(t => t)
 
-      typesOpt.foreach { types => query = query.filter(_.name.inSet(types)) }
+      typesOpt.foreach { types => query = query.filter(_.`type`.inSet(types)) }
       groupOpt.foreach { g => query = query.filter(_.group === Option(g)) }
       namespaceOpt.foreach { ns => query = query.filter(_.namespace === Option(ns)) }
 
@@ -74,9 +75,9 @@ class ResourceRepositoryImpl @Inject()(db: Database)(implicit ec: ExecutionConte
         case dbCfg: SQLDBConfig =>
           table.filter(t => t.name === "database" && t.payload.like(s"""%"dbUrl":"${dbCfg.dbUrl}"%"""))
         case kafkaCfg: KafkaResourceConfig =>
-          table.filter(t => t.name === "kafka" && t.payload.like(s"""%"brokerList":"${kafkaCfg.brokerList}"%"""))
+          table.filter(t => t.name === "kafka" && t.payload.like(s"""%"brokersList":"${kafkaCfg.brokersList}"%"""))
         case apiCfg: APISchemaConfig =>
-          table.filter(t => t.name === "api-schema" && t.payload.like(s"""%"url":"${apiCfg.url}"%"""))
+          table.filter(t => t.name === "http" && t.payload.like(s"""%"url":"${apiCfg.url}"%"""))
         case _ =>
           table.filter(_.id === "___no_match___") // always empty
       }

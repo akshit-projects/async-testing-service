@@ -13,6 +13,8 @@ trait ResourceConfig {
 
   val id: String
 
+  val `type`: String
+
   def getId: String
 
   def setId(newId: String): ResourceConfig
@@ -33,7 +35,7 @@ object ResourceConfig {
   implicit val configDecoder: Decoder[ResourceConfig] = (c: HCursor) => {
     c.downField("type").as[String].flatMap {
       case "kafka" => c.as[KafkaResourceConfig]
-      case "api-schema" => c.as[APISchemaConfig]
+      case "http" => c.as[APISchemaConfig]
       case "cache" => c.as[CacheConfig]
       case "db" => c.as[SQLDBConfig]
       case other => Left(DecodingFailure(s"Unknown type: $other", c.history))

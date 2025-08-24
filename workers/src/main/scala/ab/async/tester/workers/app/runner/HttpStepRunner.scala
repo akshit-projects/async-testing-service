@@ -4,6 +4,7 @@ import ab.async.tester.domain.enums.StepStatus
 import ab.async.tester.domain.resource.APISchemaConfig
 import ab.async.tester.domain.step.{FlowStep, HttpResponse, HttpStepMeta, StepError, StepResponse}
 import ab.async.tester.library.repository.resource.ResourceRepository
+import ab.async.tester.workers.app.matchers.ResponseMatcher
 import com.google.inject.{Inject, Singleton}
 import play.api.libs.ws.StandaloneWSClient
 
@@ -59,7 +60,7 @@ class HttpStepRunner @Inject()(wsClient: StandaloneWSClient, resourceRepository:
 
             if (httpMeta.expectedStatus.nonEmpty && httpMeta.expectedStatus.get != statusStr) {
               logger.info(s"Expected status not matching for HTTP request: expected=${httpMeta.expectedStatus.get}, actual=${statusStr}")
-              return Future.successful(StepResponse(
+              StepResponse(
                 name = step.name,
                 id = step.id.getOrElse(""),
                 status = StepStatus.ERROR,
@@ -68,30 +69,41 @@ class HttpStepRunner @Inject()(wsClient: StandaloneWSClient, resourceRepository:
                   actualValue = Some(statusStr),
                   error = "Status code not matching"
                 )
-              ))
-            }
+              )
+            } else if (httpMeta.expectedResponse.exists(_.nonEmpty)) {
+              val expectedBody = httpMeta.expectedResponse.get
+              val actualBody = response.body
+              // Get the content type, defaulting to None if not present
+              val contentType = response.headers.get("Content-Type").flatMap(_.headOption)
 
-            if (httpMeta.expectedResponse.nonEmpty && httpMeta.expectedResponse.get != response.body) {
-              logger.info(s"Expected response not matching for HTTP request")
-              return Future.successful(StepResponse(
+              if (!ResponseMatcher.matches(expectedBody, actualBody, contentType)) {
+                logger.info(s"Expected response not matching for HTTP request. Content-Type: ${contentType.getOrElse("N/A")}")
+                StepResponse(
+                  name = step.name,
+                  id = step.id.getOrElse(""),
+                  status = StepStatus.ERROR,
+                  response = StepError(
+                    expectedValue = httpMeta.expectedResponse,
+                    actualValue = Some(actualBody),
+                    error = "Response body not matching expected value or structure"
+                  )
+                )
+              } else {
+                StepResponse(
+                  name = step.name,
+                  id = step.id.getOrElse(""),
+                  status = StepStatus.SUCCESS,
+                  response = httpResponse
+                )
+              }
+            } else {
+              StepResponse(
                 name = step.name,
                 id = step.id.getOrElse(""),
-                status = StepStatus.ERROR,
-                response = StepError(
-                  expectedValue = httpMeta.expectedResponse,
-                  actualValue = Some(response.body),
-                  error = "Response not matching"
-                )
-              ))
+                status = StepStatus.SUCCESS,
+                response = httpResponse
+              )
             }
-
-            // Return success response with HTTP response data
-            StepResponse(
-              name = step.name,
-              id = step.id.getOrElse(""),
-              status = StepStatus.SUCCESS,
-              response = httpResponse
-            )
           }
         }
       }

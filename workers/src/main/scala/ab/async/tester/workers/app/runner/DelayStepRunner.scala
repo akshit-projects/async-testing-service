@@ -1,9 +1,12 @@
 package ab.async.tester.workers.app.runner
 
 import ab.async.tester.domain.enums.StepStatus
-import ab.async.tester.domain.step.{DelayStepMeta, FlowStep, StepResponse}
+import ab.async.tester.domain.step.{DelayResponse, DelayStepMeta, FlowStep, StepResponse}
+import akka.actor.ActorSystem
+import akka.pattern.after
 import com.google.inject.{Inject, Singleton}
 
+import scala.concurrent.duration.DurationLong
 import scala.concurrent.{ExecutionContext, Future}
 
 
@@ -11,7 +14,7 @@ import scala.concurrent.{ExecutionContext, Future}
  * Delay step runner that waits for a specified time
  */
 @Singleton
-class DelayStepRunner @Inject()(implicit ec: ExecutionContext) extends BaseStepRunner {
+class DelayStepRunner @Inject()(implicit ec: ExecutionContext, system: ActorSystem) extends BaseStepRunner {
   override protected val runnerName: String = "DelayStepRunner"
   
   override protected def executeStep(step: FlowStep, previousResults: List[StepResponse]): Future[StepResponse] = {
@@ -33,16 +36,17 @@ class DelayStepRunner @Inject()(implicit ec: ExecutionContext) extends BaseStepR
       } else {
         // Create a delayed future
         logger.info(s"Delaying step ${step.name} for ${delayMs}ms")
-        
-        Thread.sleep(delayMs)
-        Future.successful(
-          StepResponse(
-            name = step.name,
-            id = step.id.getOrElse(""),
-            status = StepStatus.SUCCESS,
-            response = null
+
+        after(delayMs.milliseconds, using = system.scheduler) {
+          Future.successful(
+            StepResponse(
+              name = step.name,
+              id = step.id.getOrElse(""),
+              status = StepStatus.SUCCESS,
+              response = DelayResponse(true)
+            )
           )
-        )
+        }
       }
     } catch {
       case e: Exception =>

@@ -6,6 +6,7 @@ import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 case class CacheConfig(id: String,
                        `namespace`: Option[String],
                        group: Option[String],
+                       `type`: String,
                        name: String,
                        url: String,
                        password: String) extends ResourceConfig {

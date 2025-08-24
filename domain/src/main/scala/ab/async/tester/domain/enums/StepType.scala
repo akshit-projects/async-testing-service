@@ -11,14 +11,14 @@ object StepType {
   case object Delay          extends StepType
 
   implicit val encodeStepStatus: Encoder[StepType] = Encoder.encodeString.contramap[StepType] {
-    case HttpRequest => "http_request"
+    case HttpRequest => "http"
     case KafkaPublish   => "kafka_publish"
     case KafkaSubscribe   => "kafka_subscribe"
     case Delay   => "delay"
   }
 
   implicit val decodeStepStatus: Decoder[StepType] = Decoder.decodeString.emap {
-    case "http_request"     | "http"      => Right(HttpRequest)
+    case "http"     => Right(HttpRequest)
     case "kafka_publish"    | "kafka_pub" => Right(KafkaPublish)
     case "kafka_subscribe"  | "kafka_sub" => Right(KafkaSubscribe)
     case "delay"                          => Right(Delay)

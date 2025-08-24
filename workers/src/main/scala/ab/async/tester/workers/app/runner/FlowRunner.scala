@@ -1,8 +1,8 @@
 package ab.async.tester.workers.app.runner
 
 import ab.async.tester.domain.enums.{ExecutionStatus, StepStatus}
-import ab.async.tester.domain.execution.{Execution, ExecutionStatusUpdate, ExecutionStep}
-import ab.async.tester.domain.step.{FlowStep, StepError, StepResponse}
+import ab.async.tester.domain.execution.{Execution, ExecutionStatusUpdate, ExecutionStep, StepUpdate}
+import ab.async.tester.domain.step.{FlowStep, StepError, StepResponse, StepResponseValue}
 import ab.async.tester.library.cache.RedisClient
 import ab.async.tester.library.repository.execution.ExecutionRepository
 import ab.async.tester.library.utils.MetricUtils
@@ -145,7 +145,7 @@ class FlowRunnerImpl @Inject()(
       logger.info(s"Executing step ${step.name} (background: ${step.runInBackground})")
 
       // Publish step started update
-      publishStepUpdate(executionId, step.name, "Step started", StepStatus.TODO)
+      publishStepUpdate(executionId, step.id.get, "Step started", StepStatus.IN_PROGRESS)
 
       // Find the appropriate runner for this step
       val runner = stepRunnerRegistry.getRunnerForStep(step.stepType)
@@ -176,14 +176,14 @@ class FlowRunnerImpl @Inject()(
           val stepFuture = executeStep(currentStep)
 
           // Track the background step
-          backgroundSteps += (currentStep.name -> stepFuture)
+          backgroundSteps += (currentStep.id.get -> stepFuture)
 
           // Handle background step completion
           stepFuture.onComplete {
             case Success(response) =>
-              publishStepUpdate(executionId, response.name, "Step completed", response.status)
-              stepResults += (currentStep.name -> response)
-              backgroundSteps -= currentStep.name
+              publishStepUpdate(executionId, response.id, "Step completed", response.status)
+              stepResults += (currentStep.id.get -> response)
+              backgroundSteps -= currentStep.id.get
 
               if (response.status == StepStatus.ERROR && !currentStep.continueOnSuccess) {
                 logger.error(s"Background step ${currentStep.name} failed with error status")
@@ -202,9 +202,9 @@ class FlowRunnerImpl @Inject()(
                 )
               )
 
-              publishStepUpdate(executionId, errorResponse.name, s"Step failed: ${e.getMessage}", StepStatus.ERROR)
-              stepResults += (currentStep.name -> errorResponse)
-              backgroundSteps -= currentStep.name
+              publishStepUpdate(executionId, errorResponse.id, s"Step failed: ${e.getMessage}", StepStatus.ERROR)
+              stepResults += (currentStep.id.get -> errorResponse)
+              backgroundSteps -= currentStep.id.get
           }
 
           // Continue processing next steps immediately
@@ -212,8 +212,8 @@ class FlowRunnerImpl @Inject()(
         } else {
           // Execute regular step and wait for it to complete before proceeding
           executeStep(currentStep).flatMap { response =>
-            publishStepUpdate(executionId, response.name, "Step completed", response.status)
-            stepResults += (currentStep.name -> response)
+            publishStepUpdate(executionId, response.id, "Step completed", response.status, Some(response.response))
+            stepResults += (currentStep.id.get -> response)
 
             if (response.status == StepStatus.ERROR && !currentStep.continueOnSuccess) {
               logger.error(s"Step ${currentStep.name} failed with error status, stopping flow")
@@ -237,8 +237,8 @@ class FlowRunnerImpl @Inject()(
                 )
               )
 
-              publishStepUpdate(executionId, errorResponse.name, s"Step failed: ${e.getMessage}", StepStatus.ERROR)
-              stepResults += (currentStep.name -> errorResponse)
+              publishStepUpdate(executionId, errorResponse.id, s"Step failed: ${e.getMessage}", StepStatus.ERROR)
+              stepResults += (currentStep.id.get -> errorResponse)
 
               if (!currentStep.continueOnSuccess) {
                 // Stop flow execution on error
@@ -301,12 +301,12 @@ class FlowRunnerImpl @Inject()(
   /**
    * Publish step status update to Redis
    */
-  private def publishStepUpdate(executionId: String, stepName: String, message: String, status: StepStatus): Unit = {
+  private def publishStepUpdate(executionId: String, stepId: String, message: String, status: StepStatus, stepResponse: Option[StepResponseValue] = None): Unit = {
     Try {
-      val stepUpdate = ab.async.tester.domain.execution.StepUpdate(
-        stepId = stepName,
+      val stepUpdate = StepUpdate(
+        stepId = stepId,
         status = status,
-        response = None
+        response = stepResponse
       )
 
       val update = ExecutionStatusUpdate(
@@ -320,13 +320,13 @@ class FlowRunnerImpl @Inject()(
       val jedis = redisClient.getPool.getResource
       try {
         jedis.publish(redisChannel, update.asJson.noSpaces)
-        logger.debug(s"Published step update for $executionId/$stepName: $message")
+        logger.debug(s"Published step update for $executionId/$stepId: $message: $status")
       } finally {
         jedis.close()
       }
     }.recover {
       case e: Exception =>
-        logger.error(s"Failed to publish step update for $executionId/$stepName: ${e.getMessage}", e)
+        logger.error(s"Failed to publish step update for $executionId/$stepId: ${e.getMessage}", e)
     }
   }
 }
