@@ -1,6 +1,7 @@
 package ab.async.tester.workers.app.runner
 
 import ab.async.tester.domain.enums.StepStatus
+import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.resource.APISchemaConfig
 import ab.async.tester.domain.step.{FlowStep, HttpResponse, HttpStepMeta, StepError, StepResponse}
 import ab.async.tester.library.repository.resource.ResourceRepository
@@ -18,7 +19,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class HttpStepRunner @Inject()(wsClient: StandaloneWSClient, resourceRepository: ResourceRepository)(implicit ec: ExecutionContext) extends BaseStepRunner {
   override protected val runnerName: String = "HttpStepRunner"
 
-  override protected def executeStep(step: FlowStep, previousResults: List[StepResponse]): Future[StepResponse] = {
+  override protected def executeStep(step: ExecutionStep, previousResults: List[StepResponse]): Future[StepResponse] = {
     try {
       // Extract step metadata - get the HttpStepMeta if available or create a default
       val httpMeta = step.meta match {
@@ -59,7 +60,7 @@ class HttpStepRunner @Inject()(wsClient: StandaloneWSClient, resourceRepository:
             )
 
             if (httpMeta.expectedStatus.nonEmpty && httpMeta.expectedStatus.get != statusStr) {
-              logger.info(s"Expected status not matching for HTTP request: expected=${httpMeta.expectedStatus.get}, actual=${statusStr}")
+              logger.info(s"Expected status not matching for HTTP request: expected=${httpMeta.expectedStatus.get}, actual=$statusStr")
               StepResponse(
                 name = step.name,
                 id = step.id.getOrElse(""),

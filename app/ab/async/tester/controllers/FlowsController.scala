@@ -29,7 +29,7 @@ class FlowsController @Inject()(
 
     // keep controller thin
     flowService.getFlows(search, ids, limit, page).map { flows =>
-      Ok(flows.asJson.noSpaces)
+      Ok(flows.asJson.noSpaces).as("application/json")
     } recover {
       case ex =>
         logger.error("getFlows failed", ex)
@@ -40,7 +40,7 @@ class FlowsController @Inject()(
   /** GET /v1/flows/:id */
   def getFlow(id: String): Action[AnyContent] = Action.async { implicit request =>
     flowService.getFlow(id).map {
-      case Some(flow) => Ok(flow.asJson.noSpaces)
+      case Some(flow) => Ok(flow.asJson.noSpaces).as("application/json")
       case None       => NotFound(Map("error" -> s"Flow not found: $id").asJsonNoSpaces)
     } recover {
       case ex =>
@@ -74,7 +74,7 @@ class FlowsController @Inject()(
       case Left(result) => Future.successful(result)
       case Right(flow) =>
         flowService.updateFlow(flow).map {
-          case true => Ok(Map("status" -> "ok").asJsonNoSpaces)
+          case true => Ok(Map("status" -> "ok").asJsonNoSpaces).as("application/json")
           case false => NotFound(Map("error" -> "flow not found").asJsonNoSpaces)
         } recover {
           case ex =>
@@ -97,7 +97,7 @@ class FlowsController @Inject()(
   /** GET /v1/flows/:flowId/versions - get all versions of a flow */
   def getFlowVersions(flowId: String): Action[AnyContent] = Action.async { implicit request =>
     flowService.getFlowVersions(flowId).map { versions =>
-      Ok(versions.asJson.noSpaces)
+      Ok(versions.asJson.noSpaces).as("application/json")
     } recover {
       case ex =>
         logger.error(s"getFlowVersions $flowId failed", ex)
@@ -108,7 +108,7 @@ class FlowsController @Inject()(
   /** GET /v1/flows/:flowId/versions/:version - get a specific version of a flow */
   def getFlowVersion(flowId: String, version: Int): Action[AnyContent] = Action.async { implicit request =>
     flowService.getFlowVersion(flowId, version).map {
-      case Some(flowVersion) => Ok(flowVersion.asJson.noSpaces)
+      case Some(flowVersion) => Ok(flowVersion.asJson.noSpaces).as("application/json")
       case None => NotFound(Map("error" -> s"Flow version not found: $flowId v$version").asJsonNoSpaces)
     } recover {
       case ex =>

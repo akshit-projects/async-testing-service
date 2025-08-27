@@ -54,19 +54,17 @@ object StepMeta {
   }
 
   // Type discriminator field for more control
-  implicit val decodeStepMeta: Decoder[StepMeta] = new Decoder[StepMeta] {
-    def apply(c: HCursor): Decoder.Result[StepMeta] = {
-      if (c.downField("body").succeeded) {
-        c.as[HttpStepMeta]
-      } else if (c.downField("delayMs").succeeded) {
-        c.as[DelayStepMeta]
-      } else if (c.downField("groupId").succeeded && c.downField("maxMessages").succeeded) {
-        c.as[KafkaSubscribeMeta]
-      } else if (c.downField("messages").succeeded) {
-        c.as[KafkaPublishMeta]
-      } else {
-        Left(DecodingFailure("Could not determine step meta type", c.history))
-      }
+  implicit val decodeStepMeta: Decoder[StepMeta] = (c: HCursor) => {
+    if (c.downField("body").succeeded) {
+      c.as[HttpStepMeta]
+    } else if (c.downField("delayMs").succeeded) {
+      c.as[DelayStepMeta]
+    } else if (c.downField("groupId").succeeded && c.downField("maxMessages").succeeded) {
+      c.as[KafkaSubscribeMeta]
+    } else if (c.downField("messages").succeeded) {
+      c.as[KafkaPublishMeta]
+    } else {
+      Left(DecodingFailure("Could not determine step meta type", c.history))
     }
   }
 }

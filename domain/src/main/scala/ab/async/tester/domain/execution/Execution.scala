@@ -17,7 +17,8 @@ case class Execution(
   completedAt: Option[Instant] = None,
   steps: List[ExecutionStep],
   updatedAt: Instant,
-  parameters: Option[Map[String, String]] = None
+  parameters: Option[Map[String, String]] = None,
+  testSuiteId: Option[String] = None
 )
 
 

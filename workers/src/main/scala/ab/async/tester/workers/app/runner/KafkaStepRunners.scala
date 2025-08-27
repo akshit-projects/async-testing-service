@@ -2,6 +2,7 @@ package ab.async.tester.workers.app.runner
 
 import ab.async.tester.domain.clients.kafka.KafkaConfig
 import ab.async.tester.domain.enums.StepStatus
+import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.resource.KafkaResourceConfig
 import ab.async.tester.domain.step.{FlowStep, KafkaMessage, KafkaMessagesResponse, KafkaPublishMeta, KafkaSubscribeMeta, StepError, StepResponse}
 import ab.async.tester.library.cache.{KafkaResourceCache, RedisLockManager}
@@ -30,7 +31,7 @@ class KafkaPublisherStepRunner @Inject()(
 ) extends BaseStepRunner {
   override protected val runnerName: String = "KafkaPublisherStepRunner"
   
-  override protected def executeStep(step: FlowStep, previousResults: List[StepResponse]): Future[StepResponse] = {
+  override protected def executeStep(step: ExecutionStep, previousResults: List[StepResponse]): Future[StepResponse] = {
     val kafkaMeta = step.meta match {
       case meta: KafkaPublishMeta => meta
       case _ =>
@@ -113,7 +114,7 @@ class KafkaConsumerStepRunner @Inject()(
   // Keep track of running background consumers by step ID (now only tracking threads)
   private val backgroundThreads = scala.collection.mutable.Map[String, Thread]()
 
-  override protected def executeStep(step: FlowStep, previousResults: List[StepResponse]): Future[StepResponse] = {
+  override protected def executeStep(step: ExecutionStep, previousResults: List[StepResponse]): Future[StepResponse] = {
     val kafkaMeta = step.meta match {
       case meta: KafkaSubscribeMeta => meta
       case _ =>
@@ -154,7 +155,7 @@ class KafkaConsumerStepRunner @Inject()(
     }
   }
   
-  private def startBackgroundConsumer(step: FlowStep, kafkaMeta: KafkaSubscribeMeta, kafkaConfig: KafkaResourceConfig): Future[StepResponse] = {
+  private def startBackgroundConsumer(step: ExecutionStep, kafkaMeta: KafkaSubscribeMeta, kafkaConfig: KafkaResourceConfig): Future[StepResponse] = {
     logger.info(s"Starting background Kafka consumer for step ${step.name} on topic ${kafkaMeta.topicName}")
     
     // Create a promise that will be completed when the background consumer is ready
@@ -262,7 +263,7 @@ class KafkaConsumerStepRunner @Inject()(
       
       // Set as daemon so it doesn't prevent app shutdown
       consumerThread.setDaemon(true)
-      consumerThread.setName(s"kafka-consumer-${step.name}-${stepId}")
+      consumerThread.setName(s"kafka-consumer-${step.name}-$stepId")
       
       // Track the thread
       synchronized {
@@ -276,7 +277,7 @@ class KafkaConsumerStepRunner @Inject()(
     }
   }
   
-  private def regularConsumer(step: FlowStep, kafkaMeta: KafkaSubscribeMeta, kafkaConfig: KafkaResourceConfig): Future[StepResponse] = {
+  private def regularConsumer(step: ExecutionStep, kafkaMeta: KafkaSubscribeMeta, kafkaConfig: KafkaResourceConfig): Future[StepResponse] = {
     val stepId = step.id.getOrElse(UUID.randomUUID().toString)
     
     Future {

@@ -8,8 +8,9 @@ GET     /api/v1/flows/:flowId/versions         ab.async.tester.controllers.Flows
 GET     /api/v1/flows/:flowId/versions/:version ab.async.tester.controllers.FlowsController.getFlowVersion(flowId: String, version: Int)
 
 # Execution endpoints
+GET     /api/v1/executions                     ab.async.tester.controllers.ExecutionController.getExecutions()
 GET     /api/v1/executions/:executionId        ab.async.tester.controllers.ExecutionController.getExecution(executionId: String)
-GET     /api/v1/executions/:executionId/stream ab.async.tester.controllers.ExecutionController.streamExecution(executionId: String)
+GET     /api/v1/executions/:executionId/stream ab.async.tester.controllers.ExecutionController.streamExecution(executionId: String, clientId: Option[String])
 
 
 # Resource endpoints

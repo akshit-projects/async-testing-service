@@ -1,6 +1,7 @@
 package ab.async.tester.workers.app.runner
 
 import ab.async.tester.domain.enums.StepStatus
+import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.step.{DelayResponse, DelayStepMeta, FlowStep, StepResponse}
 import akka.actor.ActorSystem
 import akka.pattern.after
@@ -17,7 +18,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class DelayStepRunner @Inject()(implicit ec: ExecutionContext, system: ActorSystem) extends BaseStepRunner {
   override protected val runnerName: String = "DelayStepRunner"
   
-  override protected def executeStep(step: FlowStep, previousResults: List[StepResponse]): Future[StepResponse] = {
+  override protected def executeStep(step: ExecutionStep, previousResults: List[StepResponse]): Future[StepResponse] = {
     try {
       val meta = step.meta
       

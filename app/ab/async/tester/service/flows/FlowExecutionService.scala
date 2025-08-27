@@ -27,7 +27,7 @@ trait FlowExecutionService {
    * Creates a stream for execution updates by subscribing to Redis.
    * Returns a Source that emits execution updates as JSON strings.
    */
-  def streamExecutionUpdates(executionId: String): Source[String, NotUsed]
+  def streamExecutionUpdates(executionId: String, clientId: Option[String]): Source[String, NotUsed]
 
   /**
    * Called when WebSocket connection terminates to clean up resources.

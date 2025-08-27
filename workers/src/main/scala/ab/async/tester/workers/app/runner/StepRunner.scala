@@ -1,6 +1,7 @@
 package ab.async.tester.workers.app.runner
 
 import ab.async.tester.domain.enums.{StepStatus, StepType}
+import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.step.{FlowStep, StepError, StepResponse, StepResponseValue}
 import ab.async.tester.library.utils.MetricUtils
 import com.google.inject.{ImplementedBy, Inject, Singleton}
@@ -20,7 +21,7 @@ trait StepRunner {
    * @param previousResults previous step results
    * @return a future containing the step response
    */
-  def runStep(step: FlowStep, previousResults: List[StepResponse]): Future[StepResponse]
+  def runStep(step: ExecutionStep, previousResults: List[StepResponse]): Future[StepResponse]
 }
 
 /**
@@ -93,7 +94,7 @@ abstract class BaseStepRunner(implicit ec: ExecutionContext) extends StepRunner 
   /**
    * Run a single step with timeout handling
    */
-  override def runStep(step: FlowStep, previousResults: List[StepResponse]): Future[StepResponse] = {
+  override def runStep(step: ExecutionStep, previousResults: List[StepResponse]): Future[StepResponse] = {
     MetricUtils.withAsyncServiceMetrics(runnerName, "runStep") {
       // Create a future for the step execution with timeout
       val timeoutMillis = step.timeoutMs
@@ -134,12 +135,12 @@ abstract class BaseStepRunner(implicit ec: ExecutionContext) extends StepRunner 
   /**
    * Execute the step (to be implemented by subclasses)
    */
-  protected def executeStep(step: FlowStep, previousResults: List[StepResponse]): Future[StepResponse]
+  protected def executeStep(step: ExecutionStep, previousResults: List[StepResponse]): Future[StepResponse]
   
   /**
    * Create an error response for a step
    */
-  protected def createErrorResponse(step: FlowStep, errorMessage: String): StepResponse = {
+  private def createErrorResponse(step: ExecutionStep, errorMessage: String): StepResponse = {
     StepResponse(
       name = step.name,
       id = step.id.getOrElse(""),

@@ -28,7 +28,7 @@ class AuthController @Inject() (
       case Right(authReq) =>
         authService.loginUser(authReq).map {
           user =>
-            val expiry = Instant.now().plusSeconds(1800).getEpochSecond // 30 mins // TODO change it to use config
+            val expiry = Instant.now().plusSeconds(18000).getEpochSecond // 300 mins // TODO change it to use config
             val secret = config.get[String]("jwt.secret")
 
             val claim = JwtClaim(

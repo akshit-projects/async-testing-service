@@ -1,7 +1,7 @@
 package ab.async.tester.library.repository.resource
 
 import ab.async.tester.domain.resource._
-import ab.async.tester.library.utils.{MetricUtils}
+import ab.async.tester.library.utils.MetricUtils
 import com.google.inject.{ImplementedBy, Inject, Singleton}
 import io.circe.syntax.EncoderOps
 import play.api.Logger

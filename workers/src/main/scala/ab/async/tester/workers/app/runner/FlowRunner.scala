@@ -1,5 +1,6 @@
 package ab.async.tester.workers.app.runner
 
+import ab.async.tester.domain.enums.StepStatus.IN_PROGRESS
 import ab.async.tester.domain.enums.{ExecutionStatus, StepStatus}
 import ab.async.tester.domain.execution.{Execution, ExecutionStatusUpdate, ExecutionStep, StepUpdate}
 import ab.async.tester.domain.step.{FlowStep, StepError, StepResponse, StepResponseValue}
@@ -101,39 +102,37 @@ class FlowRunnerImpl @Inject()(
 
       // Update execution status to in-progress
       publishExecutionUpdate(execution.id, "Execution started", ExecutionStatus.InProgress)
-      executionRepository.updateStatus(execution.id, ExecutionStatus.InProgress)
+      executionRepository.updateStatus(execution.id, ExecutionStatus.InProgress).flatMap { _ =>
 
-      // Convert ExecutionSteps to FlowSteps for processing
-      val flowSteps = execution.steps.map(convertExecutionStepToFlowStep)
+        // Execute steps sequentially
+        executeFlowSteps(execution.id, execution.steps).map { successful =>
+          val finalStatus = if (successful) ExecutionStatus.Completed else ExecutionStatus.Failed
+          val message = if (successful) "Execution completed successfully" else "Execution failed"
 
-      // Execute steps sequentially
-      executeFlowSteps(execution.id, flowSteps).map { successful =>
-        val finalStatus = if (successful) ExecutionStatus.Completed else ExecutionStatus.Failed
-        val message = if (successful) "Execution completed successfully" else "Execution failed"
-
-        // Update final status
-        publishExecutionUpdate(execution.id, message, finalStatus)
-        executionRepository.updateStatus(execution.id, finalStatus).map { _ =>
-          logger.info(s"Execution ${execution.id} completed with status: $finalStatus")
-
-        }
-      }.recoverWith {
-        case e: Exception =>
-          logger.error(s"Execution ${execution.id} failed with exception: ${e.getMessage}", e)
-          publishExecutionUpdate(execution.id, s"Execution failed: ${e.getMessage}", ExecutionStatus.Failed)
-          executionRepository.updateStatus(execution.id, ExecutionStatus.Failed).map { _ =>
-            logger.info(s"Execution ${execution.id} completed with status: ${ExecutionStatus.Failed}")
+          // Update final status
+          executionRepository.updateStatus(execution.id, finalStatus).map { _ =>
+            publishExecutionUpdate(execution.id, message, finalStatus)
+            logger.info(s"Execution ${execution.id} completed with status: $finalStatus")
           }
-      }.map {_ =>
-        logger.info("")
+        }.recoverWith {
+          case e: Exception =>
+            logger.error(s"Execution ${execution.id} failed with exception: ${e.getMessage}", e)
+            publishExecutionUpdate(execution.id, s"Execution failed: ${e.getMessage}", ExecutionStatus.Failed)
+            executionRepository.updateStatus(execution.id, ExecutionStatus.Failed).map { _ =>
+              logger.info(s"Execution ${execution.id} completed with status: ${ExecutionStatus.Failed}")
+            }
+        }.map {_ =>
+          logger.info("")
+        }
       }
     }
+
   }
   
   /**
    * Execute steps sequentially with Redis pub/sub updates
    */
-  private def executeFlowSteps(executionId: String, steps: List[FlowStep]): Future[Boolean] = {
+  private def executeFlowSteps(executionId: String, steps: List[ExecutionStep]): Future[Boolean] = {
     // Tracks results of all completed steps by name
     val stepResults = MutableMap.empty[String, StepResponse]
 
@@ -141,22 +140,26 @@ class FlowRunnerImpl @Inject()(
     val backgroundSteps = MutableMap.empty[String, Future[StepResponse]]
 
     // Execute a single step and handle background behavior
-    def executeStep(step: FlowStep): Future[StepResponse] = {
+    def executeStep(step: ExecutionStep): Future[StepResponse] = {
       logger.info(s"Executing step ${step.name} (background: ${step.runInBackground})")
 
+      val stepId = step.id.get
+      val updatedStep = step.copy(status = IN_PROGRESS) // TODO add updatedAt
       // Publish step started update
-      publishStepUpdate(executionId, step.id.get, "Step started", StepStatus.IN_PROGRESS)
+      executionRepository.updateExecutionStep(executionId, stepId, updatedStep).flatMap { _ =>
+        publishStepUpdate(executionId, stepId, "Step started", StepStatus.IN_PROGRESS)
 
-      // Find the appropriate runner for this step
-      val runner = stepRunnerRegistry.getRunnerForStep(step.stepType)
+        // Find the appropriate runner for this step
+        val runner = stepRunnerRegistry.getRunnerForStep(step.stepType)
 
-      // Execute the step with the current results
-      val allResults = stepResults.values.toList
-      runner.runStep(step, allResults)
+        // Execute the step with the current results
+        val allResults = stepResults.values.toList
+        runner.runStep(step, allResults)
+      }
     }
     
     // Execute steps sequentially
-    def processStepsSequentially(remainingSteps: List[FlowStep]): Future[Boolean] = {
+    def processStepsSequentially(remainingSteps: List[ExecutionStep]): Future[Boolean] = {
       if (remainingSteps.isEmpty) {
         // Check if any background steps are still running
         if (backgroundSteps.isEmpty) {
@@ -181,12 +184,15 @@ class FlowRunnerImpl @Inject()(
           // Handle background step completion
           stepFuture.onComplete {
             case Success(response) =>
-              publishStepUpdate(executionId, response.id, "Step completed", response.status)
-              stepResults += (currentStep.id.get -> response)
-              backgroundSteps -= currentStep.id.get
+              val updatedStep = currentStep.copy(status = response.status, response = Some(response.response))
+              executionRepository.updateExecutionStep(executionId, currentStep.id.get, updatedStep).map { _ =>
+                publishStepUpdate(executionId, response.id, "Step completed", response.status)
+                stepResults += (currentStep.id.get -> response)
+                backgroundSteps -= currentStep.id.get
 
-              if (response.status == StepStatus.ERROR && !currentStep.continueOnSuccess) {
-                logger.error(s"Background step ${currentStep.name} failed with error status")
+                if (response.status == StepStatus.ERROR && !currentStep.continueOnSuccess) {
+                  logger.error(s"Background step ${currentStep.name} failed with error status")
+                }
               }
             case Failure(e) =>
               logger.error(s"Background step ${currentStep.name} failed: ${e.getMessage}", e)
@@ -201,10 +207,12 @@ class FlowRunnerImpl @Inject()(
                   actualValue = None
                 )
               )
-
-              publishStepUpdate(executionId, errorResponse.id, s"Step failed: ${e.getMessage}", StepStatus.ERROR)
-              stepResults += (currentStep.id.get -> errorResponse)
-              backgroundSteps -= currentStep.id.get
+              val updatedStep = currentStep.copy(status = errorResponse.status, response = Some(errorResponse.response))
+              executionRepository.updateExecutionStep(executionId, currentStep.id.get, updatedStep).map { _ =>
+                publishStepUpdate(executionId, errorResponse.id, s"Step failed: ${e.getMessage}", StepStatus.ERROR)
+                stepResults += (currentStep.id.get -> errorResponse)
+                backgroundSteps -= currentStep.id.get
+              }
           }
 
           // Continue processing next steps immediately
@@ -212,15 +220,18 @@ class FlowRunnerImpl @Inject()(
         } else {
           // Execute regular step and wait for it to complete before proceeding
           executeStep(currentStep).flatMap { response =>
-            publishStepUpdate(executionId, response.id, "Step completed", response.status, Some(response.response))
-            stepResults += (currentStep.id.get -> response)
+            val updatedStep = currentStep.copy(status = response.status, response = Some(response.response))
+            executionRepository.updateExecutionStep(executionId, currentStep.id.get, updatedStep).flatMap { _ =>
+              publishStepUpdate(executionId, response.id, "Step completed", response.status, Some(response.response))
+              stepResults += (currentStep.id.get -> response)
 
-            if (response.status == StepStatus.ERROR && !currentStep.continueOnSuccess) {
-              logger.error(s"Step ${currentStep.name} failed with error status, stopping flow")
-              Future.successful(false)
-            } else {
-              // Continue with next steps
-              processStepsSequentially(nextSteps)
+              if (response.status == StepStatus.ERROR && !currentStep.continueOnSuccess) {
+                logger.error(s"Step ${currentStep.name} failed with error status, stopping flow")
+                Future.successful(false)
+              } else {
+                // Continue with next steps
+                processStepsSequentially(nextSteps)
+              }
             }
           }.recoverWith {
             case e: Exception =>
@@ -237,16 +248,19 @@ class FlowRunnerImpl @Inject()(
                 )
               )
 
-              publishStepUpdate(executionId, errorResponse.id, s"Step failed: ${e.getMessage}", StepStatus.ERROR)
-              stepResults += (currentStep.id.get -> errorResponse)
+              val updatedStep = currentStep.copy(status = errorResponse.status, response = Some(errorResponse.response))
+              executionRepository.updateExecutionStep(executionId, currentStep.id.get, updatedStep).flatMap { _ =>
+                publishStepUpdate(executionId, errorResponse.id, s"Step failed: ${e.getMessage}", StepStatus.ERROR)
+                stepResults += (currentStep.id.get -> errorResponse)
 
-              if (!currentStep.continueOnSuccess) {
-                // Stop flow execution on error
-                Future.successful(false)
-              } else {
-                // Continue with next steps despite error
-                logger.warn(s"Step ${currentStep.name} failed but continueOnSuccess=true, continuing flow")
-                processStepsSequentially(nextSteps)
+                if (!currentStep.continueOnSuccess) {
+                  // Stop flow execution on error
+                  Future.successful(false)
+                } else {
+                  // Continue with next steps despite error
+                  logger.warn(s"Step ${currentStep.name} failed but continueOnSuccess=true, continuing flow")
+                  processStepsSequentially(nextSteps)
+                }
               }
           }
         }

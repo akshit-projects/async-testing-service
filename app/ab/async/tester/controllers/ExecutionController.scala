@@ -1,10 +1,13 @@
 package ab.async.tester.controllers
 
-import ab.async.tester.library.repository.execution.ExecutionRepository
+import ab.async.tester.domain.enums.ExecutionStatus
+import ab.async.tester.domain.response.GenericError
 import ab.async.tester.library.utils.JsonParsers.ResultHelpers
+import io.circe.generic.auto._
+import ab.async.tester.service.execution.ExecutionsService
 import ab.async.tester.service.flows.FlowExecutionService
 import akka.NotUsed
-import akka.stream.scaladsl.{Flow, Source}
+import akka.stream.scaladsl.Flow
 import io.circe.syntax._
 import play.api.Logger
 import play.api.mvc._
@@ -15,7 +18,7 @@ import scala.concurrent.{ExecutionContext, Future}
 @Singleton
 class ExecutionController @Inject()(
                                      cc: ControllerComponents,
-                                     executionRepository: ExecutionRepository,
+                                     executionsService: ExecutionsService,
                                      flowExecService: FlowExecutionService
                                    )(implicit ec: ExecutionContext) extends AbstractController(cc) {
 
@@ -23,25 +26,38 @@ class ExecutionController @Inject()(
 
   /** GET /api/v1/executions/:executionId - Get execution details */
   def getExecution(executionId: String): Action[AnyContent] = Action.async { implicit request =>
-    executionRepository.findById(executionId).map {
+    executionsService.getExecutionById(executionId).map {
       case Some(execution) => Ok(execution.asJson.noSpaces)
       case None => NotFound(Map("error" -> s"Execution not found: $executionId").asJsonNoSpaces)
     }.recover {
       case ex =>
         logger.error(s"getExecution $executionId failed", ex)
-        InternalServerError(Map("error" -> "failed to fetch execution").asJsonNoSpaces)
+        InternalServerError(GenericError(errorMsg = s"Unable to get execution for id: $executionId").asJson.noSpaces)
+    }
+  }
+
+  def getExecutions(): Action[AnyContent] = Action.async { implicit request =>
+    val limit  = request.getQueryString("limit").flatMap(s => scala.util.Try(s.toInt).toOption).getOrElse(10)
+    val page   = request.getQueryString("page").flatMap(s => scala.util.Try(s.toInt).toOption).getOrElse(0)
+    val statuses    = request.getQueryString("status").map(_.split(",").toList.map(_.asInstanceOf[ExecutionStatus]))
+    executionsService.getExecutions(page, limit, statuses).map { executions =>
+      Ok(executions.asJson.noSpaces).as("application/json")
+    }.recover {
+      case ex =>
+        logger.error(s"Unable to get executions", ex)
+        InternalServerError(GenericError(errorMsg = "Unable to get executions").asJson.noSpaces)
     }
   }
 
   /** WebSocket endpoint: /api/v1/executions/:executionId/stream */
-  def streamExecution(executionId: String): WebSocket = WebSocket.acceptOrResult[String, String] { _ =>
-    logger.info(s"Starting execution stream for executionId: $executionId")
-    Future.successful(Right(handleExecutionStream(executionId)))
+  def streamExecution(executionId: String, clientId: Option[String]): WebSocket = WebSocket.acceptOrResult[String, String] { _ =>
+    logger.info(s"Starting execution stream for executionId: $executionId and $clientId")
+    Future.successful(Right(handleExecutionStream(executionId, clientId)))
   }
 
-  private def handleExecutionStream(executionId: String): Flow[String, String, NotUsed] = {
+  private def handleExecutionStream(executionId: String, clientId: Option[String]): Flow[String, String, NotUsed] = {
     // Create the execution update stream
-    val executionUpdates = flowExecService.streamExecutionUpdates(executionId)
+    val executionUpdates = flowExecService.streamExecutionUpdates(executionId, clientId)
 
     // Handle incoming messages (for potential future use like pause/resume commands)
     val incomingFlow = Flow[String].map { msg =>

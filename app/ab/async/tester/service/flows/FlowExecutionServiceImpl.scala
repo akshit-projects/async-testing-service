@@ -50,7 +50,7 @@ class FlowExecutionServiceImpl @Inject()(
     for {
       flow <- flowService.getFlow(runRequest.flowId).map(_.get) // TODO handle not found
       execution <- {
-        val execution = createExecutionEntity(executionId, flow, runRequest)
+        val execution = createExecutionEntity(executionId, flow, runRequest, None)
         executionRepository.saveExecution(execution).map(_ => execution)
       }
     } yield {
@@ -75,11 +75,11 @@ class FlowExecutionServiceImpl @Inject()(
     }
   }
 
-  override def streamExecutionUpdates(executionId: String): Source[String, NotUsed] = {
+  override def streamExecutionUpdates(executionId: String, clientId: Option[String]): Source[String, NotUsed] = {
     val (queue, source) = Source.queue[Json](64, OverflowStrategy.dropHead).preMaterialize()
 
     // Register queue for Redis updates
-    redisPubSubService.registerQueue(executionId, queue)
+    redisPubSubService.registerQueue(executionId, clientId, queue)
 
     // Map Json to String for WebSocket
     source.map(_.noSpaces)
@@ -90,7 +90,7 @@ class FlowExecutionServiceImpl @Inject()(
   }
 
 
-  private def createExecutionEntity(executionId: String, flow: Floww, runFlowRequest: RunFlowRequest) = {
+  private def createExecutionEntity(executionId: String, flow: Floww, runFlowRequest: RunFlowRequest, testSuiteId: Option[String] = None) = {
     val now = Instant.now()
     val execSteps = flow.steps.map { step =>
       ExecutionStep(
@@ -115,7 +115,8 @@ class FlowExecutionServiceImpl @Inject()(
       startedAt = now,
       steps = execSteps,
       updatedAt = now,
-      parameters = Option(runFlowRequest.params)
+      parameters = Option(runFlowRequest.params),
+      testSuiteId = testSuiteId
     )
   }
 

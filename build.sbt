@@ -61,8 +61,8 @@ lazy val workerDeps = Seq(
   "com.typesafe.akka" %% "akka-stream-kafka" % "3.0.0",
   "com.typesafe.akka" %% "akka-actor-typed" % akkaVersion,
   "ch.qos.logback" % "logback-classic" % "1.4.14", // SLF4J implementation
-  "com.typesafe.play" %% "play-ahc-ws-standalone" % "2.2.4", // WSClient for HTTP requests
-  "com.typesafe.play" %% "play-ws-standalone-json" % "2.2.4", // JSON support for WS
+  "com.typesafe.play" %% "play-ahc-ws-standalone" % "2.2.11", // WSClient for HTTP requests
+  "com.typesafe.play" %% "play-ws-standalone-json" % "2.2.11", // JSON support for WS
   guice
 ) ++ circeDeps
 
