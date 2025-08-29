@@ -1,6 +1,6 @@
 package ab.async.tester.workers.app
 
-import ab.async.tester.workers.app.runner.FlowRunner
+import ab.async.tester.workers.app.runner.{FlowRunner, TestSuiteRunner}
 import com.google.inject.{Guice, Inject, Singleton}
 import play.api.{Configuration, Logger}
 import play.api.libs.ws.StandaloneWSClient
@@ -14,6 +14,7 @@ import scala.util.{Failure, Success, Try}
 @Singleton
 class WorkerApplication @Inject()(
                                    flowRunner: FlowRunner,
+                                   testSuiteRunner: TestSuiteRunner,
                                    configuration: Configuration,
                                    wsClient: StandaloneWSClient
                                  )(implicit ec: ExecutionContext) {
@@ -31,18 +32,24 @@ class WorkerApplication @Inject()(
       // Log configuration details
       val kafkaBootstrap = configuration.getOptional[String]("kafka.bootstrap.servers").getOrElse("NOT_SET")
       val workerTopic = configuration.getOptional[String]("events.workerQueueTopic").getOrElse("NOT_SET")
+      val testSuiteTopic = configuration.getOptional[String]("events.testSuiteExecutionTopic").getOrElse("NOT_SET")
       val redisHost = configuration.getOptional[String]("redis.host").getOrElse("NOT_SET")
 
       logger.info(s"Kafka Bootstrap Servers: $kafkaBootstrap")
       logger.info(s"Worker Queue Topic: $workerTopic")
+      logger.info(s"Test Suite Execution Topic: $testSuiteTopic")
       logger.info(s"Redis Host: $redisHost")
 
       // Start the flow consumer
       logger.info("Starting FlowRunner consumer...")
       flowRunner.startFlowConsumer()
 
+      // Start the test suite consumer
+      logger.info("Starting TestSuiteRunner consumer...")
+      testSuiteRunner.startTestSuiteConsumer()
+
       logger.info("Worker application started successfully")
-      logger.info("Worker is now consuming Kafka messages and executing flows")
+      logger.info("Worker is now consuming Kafka messages and executing flows and test suites")
 
     } match {
       case Success(_) =>

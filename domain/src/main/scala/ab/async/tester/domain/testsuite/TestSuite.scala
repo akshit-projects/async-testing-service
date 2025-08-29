@@ -6,12 +6,12 @@ import io.circe.{Decoder, Encoder}
 /**
  * Configuration for a flow within a test suite
  * @param flowId The ID of the flow to execute
- * @param version The version of the flow to execute ("latest" for latest version, or specific version number as string)
+ * @param version The version of the flow to execute (None for latest version, or specific version number as string)
  * @param parameters Optional parameters to pass to the flow execution
  */
 case class TestSuiteFlowConfig(
   flowId: String,
-  version: String = "latest",
+  version: Option[Int] = None,
   parameters: Option[Map[String, String]] = None
 )
 

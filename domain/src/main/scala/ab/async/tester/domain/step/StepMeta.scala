@@ -55,7 +55,7 @@ object StepMeta {
 
   // Type discriminator field for more control
   implicit val decodeStepMeta: Decoder[StepMeta] = (c: HCursor) => {
-    if (c.downField("body").succeeded) {
+    if (c.downField("body").succeeded || c.downField("method").succeeded) {
       c.as[HttpStepMeta]
     } else if (c.downField("delayMs").succeeded) {
       c.as[DelayStepMeta]

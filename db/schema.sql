@@ -53,13 +53,64 @@ CREATE TABLE executions (
     steps JSONB NOT NULL,
     updatedAt TIMESTAMP WITH TIME ZONE NOT NULL, -- Instant type
     parameters JSONB,
-    
+    testSuiteId VARCHAR(255), -- Optional reference to test suite
+
     -- Foreign key constraint to flows table
     CONSTRAINT fk_executions_flow_id FOREIGN KEY (flowId) REFERENCES flows(id) ON DELETE CASCADE
 );
 
 -- Indexes for executions table
 CREATE INDEX idx_executions_flow_id ON executions(flowId);
+CREATE INDEX idx_executions_test_suite_id ON executions(testSuiteId);
+
+-- =====================================================
+-- TEST SUITES TABLE
+-- Based on: domain/testsuite/TestSuite.scala
+-- =====================================================
+CREATE TABLE test_suites (
+    id VARCHAR(255) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    creator VARCHAR(255) NOT NULL,
+    flows JSONB NOT NULL, -- List of TestSuiteFlowConfig
+    runUnordered BOOLEAN NOT NULL DEFAULT FALSE,
+    createdAt BIGINT NOT NULL,
+    modifiedAt BIGINT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE INDEX idx_test_suites_creator ON test_suites(creator);
+CREATE INDEX idx_test_suites_enabled ON test_suites(enabled);
+
+-- =====================================================
+-- TEST SUITE EXECUTIONS TABLE
+-- Based on: domain/testsuite/TestSuiteExecution.scala
+-- =====================================================
+CREATE TABLE test_suite_executions (
+    id VARCHAR(255) PRIMARY KEY,
+    testSuiteId VARCHAR(255) NOT NULL,
+    testSuiteName VARCHAR(255) NOT NULL,
+    status VARCHAR(50) NOT NULL CHECK (status IN ('TODO', 'IN_PROGRESS', 'COMPLETED', 'FAILED')),
+    startedAt TIMESTAMP WITH TIME ZONE NOT NULL,
+    completedAt TIMESTAMP WITH TIME ZONE,
+    flowExecutions JSONB NOT NULL, -- List of TestSuiteFlowExecution
+    runUnordered BOOLEAN NOT NULL DEFAULT FALSE,
+    triggeredBy VARCHAR(255) NOT NULL,
+    totalFlows INTEGER NOT NULL,
+    completedFlows INTEGER NOT NULL DEFAULT 0,
+    failedFlows INTEGER NOT NULL DEFAULT 0,
+
+    -- Foreign key constraint to test_suites table
+    CONSTRAINT fk_test_suite_executions_test_suite_id FOREIGN KEY (testSuiteId) REFERENCES test_suites(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_test_suite_executions_test_suite_id ON test_suite_executions(testSuiteId);
+CREATE INDEX idx_test_suite_executions_triggered_by ON test_suite_executions(triggeredBy);
+CREATE INDEX idx_test_suite_executions_status ON test_suite_executions(status);
+
+-- Add foreign key constraint from executions to test_suites (optional reference)
+ALTER TABLE executions ADD CONSTRAINT fk_executions_test_suite_id
+    FOREIGN KEY (testSuiteId) REFERENCES test_suites(id) ON DELETE SET NULL;
 
 CREATE TABLE resource_configs (
     id VARCHAR(255) PRIMARY KEY,

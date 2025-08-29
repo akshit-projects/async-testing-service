@@ -12,6 +12,19 @@ GET     /api/v1/executions                     ab.async.tester.controllers.Execu
 GET     /api/v1/executions/:executionId        ab.async.tester.controllers.ExecutionController.getExecution(executionId: String)
 GET     /api/v1/executions/:executionId/stream ab.async.tester.controllers.ExecutionController.streamExecution(executionId: String, clientId: Option[String])
 
+# Test Suite endpoints
+GET     /api/v1/test-suites                    ab.async.tester.controllers.TestSuiteController.getTestSuites
+POST    /api/v1/test-suites                    ab.async.tester.controllers.TestSuiteController.createTestSuite()
+PUT     /api/v1/test-suites                    ab.async.tester.controllers.TestSuiteController.updateTestSuite()
+DELETE  /api/v1/test-suites/:id                ab.async.tester.controllers.TestSuiteController.deleteTestSuite(id: String)
+POST    /api/v1/test-suites/run                ab.async.tester.controllers.TestSuiteController.runTestSuite()
+POST    /api/v1/test-suites/validate           ab.async.tester.controllers.TestSuiteController.validateTestSuite()
+GET     /api/v1/test-suites/:id                ab.async.tester.controllers.TestSuiteController.getTestSuite(id: String)
+
+# Test Suite Execution endpoints
+GET     /api/v1/test-suite-executions          ab.async.tester.controllers.TestSuiteController.getTestSuiteExecutions()
+GET     /api/v1/test-suite-executions/:id      ab.async.tester.controllers.TestSuiteController.getTestSuiteExecution(id: String)
+
 
 # Resource endpoints
 GET     /api/v1/resources          ab.async.tester.controllers.ResourceController.getResources
