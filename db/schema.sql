@@ -53,7 +53,7 @@ CREATE TABLE executions (
     steps JSONB NOT NULL,
     updatedAt TIMESTAMP WITH TIME ZONE NOT NULL, -- Instant type
     parameters JSONB,
-    testSuiteId VARCHAR(255), -- Optional reference to test suite
+    testSuiteExecutionId VARCHAR(255), -- Optional reference to test suite execution
 
     -- Foreign key constraint to flows table
     CONSTRAINT fk_executions_flow_id FOREIGN KEY (flowId) REFERENCES flows(id) ON DELETE CASCADE
@@ -61,7 +61,7 @@ CREATE TABLE executions (
 
 -- Indexes for executions table
 CREATE INDEX idx_executions_flow_id ON executions(flowId);
-CREATE INDEX idx_executions_test_suite_id ON executions(testSuiteId);
+CREATE INDEX idx_executions_test_suite_execution_id ON executions(testSuiteExecutionId);
 
 -- =====================================================
 -- TEST SUITES TABLE
@@ -108,9 +108,9 @@ CREATE INDEX idx_test_suite_executions_test_suite_id ON test_suite_executions(te
 CREATE INDEX idx_test_suite_executions_triggered_by ON test_suite_executions(triggeredBy);
 CREATE INDEX idx_test_suite_executions_status ON test_suite_executions(status);
 
--- Add foreign key constraint from executions to test_suites (optional reference)
-ALTER TABLE executions ADD CONSTRAINT fk_executions_test_suite_id
-    FOREIGN KEY (testSuiteId) REFERENCES test_suites(id) ON DELETE SET NULL;
+-- Add foreign key constraint from executions to test_suite_executions (optional reference)
+ALTER TABLE executions ADD CONSTRAINT fk_executions_test_suite_execution_id
+    FOREIGN KEY (testSuiteExecutionId) REFERENCES test_suite_executions(id) ON DELETE SET NULL;
 
 CREATE TABLE resource_configs (
     id VARCHAR(255) PRIMARY KEY,

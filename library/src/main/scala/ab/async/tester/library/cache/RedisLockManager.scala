@@ -1,5 +1,8 @@
 package ab.async.tester.library.cache
 
+import akka.actor.ActorSystem
+import akka.pattern.after
+
 import javax.inject._
 import play.api.{Configuration, Logger}
 import redis.clients.jedis.params.SetParams
@@ -42,7 +45,7 @@ class RedisClient @Inject()(configuration: Configuration) {
  * This provides locking capabilities for any resource across multiple application instances
  */
 @Singleton
-class RedisLockManager @Inject()(redisClient: RedisClient)(implicit ec: ExecutionContext) {
+class RedisLockManager @Inject()(redisClient: RedisClient)(implicit ec: ExecutionContext, system: ActorSystem) {
   private val logger = Logger(this.getClass)
   
   // Default lock expiration in seconds
@@ -119,11 +122,7 @@ class RedisLockManager @Inject()(redisClient: RedisClient)(implicit ec: Executio
           Future.successful(true)
         } else {
           // Wait before retrying
-          val delay = Future {
-            Thread.sleep(retryDelayMs)
-          }
-          
-          delay.flatMap(_ => tryAcquire(retriesLeft - 1))
+          after(retryDelayMs.milliseconds, system.scheduler)(tryAcquire(retriesLeft - 1))
         }
       }
     }
@@ -188,7 +187,7 @@ class RedisLockManager @Inject()(redisClient: RedisClient)(implicit ec: Executio
    * @param task the task to execute with the lock
    * @return a future containing the result of the task or a failure if lock acquisition fails
    */
-  private def withLock[T](
+  def withLock[T](
                            lockKey: String,
                            expirationMillis: Int = DefaultLockExpiration,
                            maxRetries: Int = DefaultMaxRetries
@@ -236,7 +235,7 @@ class RedisLockManager @Inject()(redisClient: RedisClient)(implicit ec: Executio
   /**
    * Helper method to execute Redis operations with resource management
    */
-  private def withJedis[T](operation: Jedis => T): T = {
+  def withJedis[T](operation: Jedis => T): T = {
     var jedis: Jedis = null
     try {
       jedis = jedisPool.getResource

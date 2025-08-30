@@ -37,9 +37,6 @@ case class TestSuiteFlowExecution(
  * @param flowExecutions List of individual flow executions within this test suite
  * @param runUnordered Whether flows were executed in parallel or sequentially
  * @param triggeredBy User who triggered the test suite execution
- * @param totalFlows Total number of flows in the test suite
- * @param completedFlows Number of flows that have completed (successfully or with failure)
- * @param failedFlows Number of flows that failed
  */
 case class TestSuiteExecution(
   id: String,

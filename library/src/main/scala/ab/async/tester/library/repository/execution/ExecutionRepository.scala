@@ -68,10 +68,10 @@ class ExecutionTable(tag: Tag) extends Table[Execution](tag, "executions") {
   def testSuiteExecutionId = column[Option[String]]("testsuiteexecutionid")
 
   def * = (id.?, flowId, flowVersion, status, startedAt, completedAt, steps, updatedAt, parameters, testSuiteExecutionId) <> (
-    { case (id, flowId, flowVersion, status, startedAt, completedAt, steps, updatedAt, parameters, testSuiteId) =>
+    { case (id, flowId, flowVersion, status, startedAt, completedAt, steps, updatedAt, parameters, testSuiteExecutionId) =>
       val stepsObj = DecodingUtils.decodeWithErrorLogs[List[ExecutionStep]](steps)
       val params = parameters.flatMap(DecodingUtils.decodeWithErrorLogs[Option[Map[String, String]]](_))
-      Execution(id.get, flowId, flowVersion, status, startedAt, completedAt, stepsObj, updatedAt, params, testSuiteId)
+      Execution(id.get, flowId, flowVersion, status, startedAt, completedAt, stepsObj, updatedAt, params, testSuiteExecutionId)
     },
     (e: Execution) => {
       val stepsStr = e.steps.asJson.noSpaces

@@ -2,6 +2,7 @@ package ab.async.tester.library.repository.testsuite
 
 import ab.async.tester.domain.enums.ExecutionStatus
 import ab.async.tester.domain.testsuite.{TestSuiteExecution, TestSuiteFlowExecution}
+import ab.async.tester.library.cache.RedisLockManager
 import ab.async.tester.library.constants.Constants.COMPLETED_EXECUTIONS
 import ab.async.tester.library.repository.execution.ExecutionTable.executionStatusColumnType
 import ab.async.tester.library.utils.{DecodingUtils, MetricUtils}
@@ -31,7 +32,8 @@ trait TestSuiteExecutionRepository {
 
 @Singleton
 class TestSuiteExecutionRepositoryImpl @Inject()(
-  db: Database
+  db: Database,
+  redisLockManager: RedisLockManager
 )(implicit ec: ExecutionContext) extends TestSuiteExecutionRepository {
 
   private implicit val logger: Logger = Logger(this.getClass)
@@ -123,47 +125,78 @@ class TestSuiteExecutionRepositoryImpl @Inject()(
 
   override def updateStatus(id: String, status: ExecutionStatus): Future[Boolean] = {
     MetricUtils.withAsyncRepositoryMetrics(repositoryName, "updateStatus") {
-//      val completedAt = if (isCompleted) Some(Instant.now()) else None
-      
+      val completedAt = if (COMPLETED_EXECUTIONS.contains(status)) Some(Instant.now()) else None
+
       val updateQuery = testSuiteExecutions
         .filter(_.id === id)
-//        .map(tse => (tse.status, tse.completedFlows, tse.failedFlows, tse.completedAt))
-//        .update((status, completedFlows, failedFlows, completedAt))
-      
-      db.run(updateQuery.result).map(_.nonEmpty)
+        .map(tse => (tse.status, tse.completedAt))
+        .update((status, completedAt))
+
+      db.run(updateQuery).map(_ > 0)
     }
   }
 
   override def updateTestSuiteExecution(testSuiteExecutionId: String, executionId: String, executionStatus: ExecutionStatus): Future[Unit] = {
-    MetricUtils.withAsyncRepositoryMetrics(repositoryName, "updateTestSuiteExecution") {
-      for {
-        existingSuite <- db.run(testSuiteExecutions.filter(_.id === testSuiteExecutionId).result.headOption)
-        updatedSuite <- {
-          val suite = existingSuite.get
-          val matchingExecutionIndex = suite.flowExecutions.indexWhere(_.executionId == executionId)
-          val testSuiteExecution = if (COMPLETED_EXECUTIONS.contains(executionStatus)) {
-            suite.flowExecutions(matchingExecutionIndex).copy(status = executionStatus)
-          } else {
-            suite.flowExecutions(matchingExecutionIndex).copy(status = executionStatus, completedAt = Some(Instant.now()))
-          }
-          val updatedExecutions = suite.flowExecutions.updated(matchingExecutionIndex, testSuiteExecution)
-          val areAllUpdated = areAllExecutionsUpdated(updatedExecutions)
-          val updatedSuite = if (areAllUpdated) {
-            suite.copy(flowExecutions = updatedExecutions, status = ExecutionStatus.Completed, completedAt = Some(Instant.now()))
-          } else {
-            suite.copy(flowExecutions = updatedExecutions)
-          }
-          update(updatedSuite)
-        }
-      } yield {
+    MetricUtils.withAsyncRepositoryMetrics(repositoryName, "updateTestSuiteExecutionWithLock") {
+      redisLockManager.withLock(s"test_suite_execution:$testSuiteExecutionId") {
+        // Simple read-modify-write operation protected by distributed lock
+        val action = for {
+          existingSuiteOpt <- testSuiteExecutions.filter(_.id === testSuiteExecutionId).result.headOption
+          _ <- existingSuiteOpt match {
+            case Some(suite) =>
+              val matchingExecutionIndex = suite.flowExecutions.indexWhere(_.executionId == executionId)
+              if (matchingExecutionIndex >= 0) {
+                // Update the specific flow execution status
+                val currentFlowExecution = suite.flowExecutions(matchingExecutionIndex)
+                val updatedFlowExecution = if (COMPLETED_EXECUTIONS.contains(executionStatus)) {
+                  currentFlowExecution.copy(status = executionStatus, completedAt = Some(Instant.now()))
+                } else {
+                  currentFlowExecution.copy(status = executionStatus)
+                }
 
+                val updatedExecutions = suite.flowExecutions.updated(matchingExecutionIndex, updatedFlowExecution)
+
+                // Calculate overall test suite status
+                val completedCount = updatedExecutions.count(fe => COMPLETED_EXECUTIONS.contains(fe.status))
+                val failedCount = updatedExecutions.count(_.status == ExecutionStatus.Failed)
+                val inProgressCount = updatedExecutions.count(_.status == ExecutionStatus.InProgress)
+
+                val (newStatus, newCompletedAt) = if (completedCount == updatedExecutions.length) {
+                  // All executions completed
+                  if (failedCount > 0) {
+                    (ExecutionStatus.Failed, Some(Instant.now()))
+                  } else {
+                    (ExecutionStatus.Completed, Some(Instant.now()))
+                  }
+                } else if (inProgressCount > 0 || completedCount > 0) {
+                  // Some executions are in progress or completed
+                  (ExecutionStatus.InProgress, None)
+                } else {
+                  // All still todo
+                  (ExecutionStatus.Todo, None)
+                }
+
+                val updatedSuite = suite.copy(
+                  flowExecutions = updatedExecutions,
+                  status = newStatus,
+                  completedAt = newCompletedAt,
+                )
+
+                testSuiteExecutions.filter(_.id === testSuiteExecutionId).update(updatedSuite)
+              } else {
+                logger.warn(s"Execution ID $executionId not found in test suite execution $testSuiteExecutionId")
+                DBIO.successful(0)
+              }
+            case None =>
+              logger.warn(s"Test suite execution not found: $testSuiteExecutionId")
+              DBIO.successful(0)
+          }
+        } yield ()
+
+        db.run(action).map(_ => ())
       }
     }
   }
 
-  private def areAllExecutionsUpdated(flowExecutions: List[TestSuiteFlowExecution]) = {
-    !flowExecutions.exists { execution =>
-      COMPLETED_EXECUTIONS.contains(execution.status)
-    }
-  }
+
 }
