@@ -50,7 +50,7 @@ class FlowExecutionServiceImpl @Inject()(
     for {
       flow <- flowService.getFlow(runRequest.flowId).map(_.get) // TODO handle not found
       execution <- {
-        val execution = createExecutionEntity(executionId, flow, runRequest, None)
+        val execution = createExecutionEntity(executionId, flow, runRequest)
         executionRepository.saveExecution(execution).map(_ => execution)
       }
     } yield {
@@ -90,7 +90,7 @@ class FlowExecutionServiceImpl @Inject()(
   }
 
 
-  private def createExecutionEntity(executionId: String, flow: Floww, runFlowRequest: RunFlowRequest, testSuiteId: Option[String] = None) = {
+  private def createExecutionEntity(executionId: String, flow: Floww, runFlowRequest: RunFlowRequest) = {
     val now = Instant.now()
     val execSteps = flow.steps.map { step =>
       ExecutionStep(
@@ -116,7 +116,7 @@ class FlowExecutionServiceImpl @Inject()(
       steps = execSteps,
       updatedAt = now,
       parameters = Option(runFlowRequest.params),
-      testSuiteId = testSuiteId
+      testSuiteExecutionId = runFlowRequest.testSuiteExecutionId
     )
   }
 

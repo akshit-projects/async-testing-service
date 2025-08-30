@@ -20,7 +20,7 @@
     </appender>
 
     <!-- Logger levels -->
-    <logger name="ab.async.tester" level="DEBUG"/>
+    <logger name="ab.async.tester" level="INFO"/>
     <logger name="akka" level="INFO"/>
     <logger name="kafka" level="INFO"/>
     <logger name="redis" level="INFO"/>

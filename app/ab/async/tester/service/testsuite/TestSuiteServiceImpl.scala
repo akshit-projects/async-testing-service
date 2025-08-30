@@ -1,21 +1,18 @@
 package ab.async.tester.service.testsuite
 
-import ab.async.tester.constants.Constants
 import ab.async.tester.domain.clients.kafka.KafkaConfig
 import ab.async.tester.domain.enums.ExecutionStatus
-import ab.async.tester.domain.requests.RunTestSuiteRequest
+import ab.async.tester.domain.execution.Execution
+import ab.async.tester.domain.requests.{RunFlowRequest, RunTestSuiteRequest}
 import ab.async.tester.domain.testsuite.{TestSuite, TestSuiteExecution, TestSuiteFlowExecution}
 import ab.async.tester.library.cache.KafkaResourceCache
 import ab.async.tester.library.clients.events.KafkaClient
 import ab.async.tester.library.repository.flow.FlowRepository
-import ab.async.tester.library.repository.flow.FlowVersionRepository
 import ab.async.tester.library.repository.testsuite.{TestSuiteExecutionRepository, TestSuiteRepository}
+import ab.async.tester.service.flows.FlowExecutionService
 import com.google.inject.{Inject, Singleton}
 import com.typesafe.config.Config
-import io.circe.generic.auto._
-import io.circe.syntax._
-import org.apache.kafka.clients.producer.ProducerRecord
-import play.api.{Configuration, Logger}
+import play.api.Configuration
 
 import java.time.Instant
 import java.util.UUID
@@ -29,13 +26,12 @@ class TestSuiteServiceImpl @Inject()(
                                       testSuiteRepository: TestSuiteRepository,
                                       testSuiteExecutionRepository: TestSuiteExecutionRepository,
                                       flowRepository: FlowRepository,
-                                      flowVersionRepository: FlowVersionRepository,
+                                      flowExecutionService: FlowExecutionService,
                                       kafkaResourceCache: KafkaResourceCache,
                                       kafkaClient: KafkaClient,
                                       configuration: Configuration
 )(implicit ec: ExecutionContext) extends TestSuiteService {
 
-  private val logger = Logger(this.getClass)
   private val testSuiteExecutionTopic = configuration.get[String]("events.testSuiteExecutionTopic")
   private val kafkaConfig = {
     val conf = configuration.get[Config]("kafka")
@@ -78,10 +74,24 @@ class TestSuiteServiceImpl @Inject()(
         case Some(_) => Future.failed(new IllegalArgumentException("Test suite is disabled"))
         case None => Future.failed(new IllegalArgumentException(s"Test suite not found: ${request.testSuiteId}"))
       }
-      testSuiteExecution <- createTestSuiteExecution(testSuite, request)
-      _ <- testSuiteExecutionRepository.insert(testSuiteExecution)
-      _ <- publishTestSuiteExecution(testSuiteExecution)
-    } yield testSuiteExecution
+      testSuiteExecution <- runTestSuite(testSuite, request)
+      execution <- testSuiteExecutionRepository.insert(testSuiteExecution)
+    } yield execution
+  }
+
+  private def runTestSuite(testSuite: TestSuite, request: RunTestSuiteRequest): Future[TestSuiteExecution] = {
+    val testSuiteExecutionId = UUID.randomUUID().toString
+    Future.sequence(testSuite.flows.map { flow =>
+      val runFlowRequest = RunFlowRequest(
+        flowId = flow.flowId,
+        testSuiteExecutionId = Some(testSuiteExecutionId),
+        // add initial delay to complete all processing of saving test suite
+        params = request.globalParameters.getOrElse(Map.empty) ++ Map("initialDelay" -> Math.max(testSuite.flows.length * 100, 1000).toString)
+      )
+      flowExecutionService.createExecution(runFlowRequest)
+    }).map { executions =>
+      createTestSuiteExecution(testSuite, request, executions, testSuiteExecutionId)
+    }
   }
 
   override def getTestSuiteExecutions(testSuiteId: Option[String], limit: Int, page: Int, statuses: Option[List[ExecutionStatus]]): Future[List[TestSuiteExecution]] = {
@@ -110,57 +120,28 @@ class TestSuiteServiceImpl @Inject()(
     }
   }
 
-  private def createTestSuiteExecution(testSuite: TestSuite, request: RunTestSuiteRequest): Future[TestSuiteExecution] = {
-    val executionId = UUID.randomUUID().toString
+  private def createTestSuiteExecution(testSuite: TestSuite, request: RunTestSuiteRequest, executions: List[Execution], testSuiteExecutionId: String): TestSuiteExecution = {
     val now = Instant.now()
-    
-    // Create initial flow executions (empty execution IDs, will be filled when flows are actually executed)
-    val flowExecutions = testSuite.flows.map { flowConfig =>
+    val flowExecutions = executions.map { execution =>
       TestSuiteFlowExecution(
-        flowId = flowConfig.flowId,
-        flowVersion = 0, // Will be determined when flow is executed
-        executionId = "", // Will be set when flow execution is created
+        flowId = execution.flowId,
+        flowVersion = execution.flowVersion,
+        executionId = execution.id,
         status = ExecutionStatus.Todo,
-        startedAt = now,
-        parameters = mergeParameters(flowConfig.parameters, request.globalParameters)
+        startedAt = Instant.now(),
+        parameters = request.globalParameters
       )
     }
 
-    Future.successful(TestSuiteExecution(
-      id = executionId,
+    TestSuiteExecution(
+      id = testSuiteExecutionId,
       testSuiteId = testSuite.id.get,
       testSuiteName = testSuite.name,
       status = ExecutionStatus.Todo,
       startedAt = now,
       flowExecutions = flowExecutions,
       runUnordered = testSuite.runUnordered,
-      triggeredBy = request.triggeredBy,
-      totalFlows = testSuite.flows.length
-    ))
-  }
-
-  private def mergeParameters(flowParams: Option[Map[String, String]], globalParams: Option[Map[String, String]]): Option[Map[String, String]] = {
-    (flowParams, globalParams) match {
-      case (Some(fp), Some(gp)) => Some(fp ++ gp) // Global parameters override flow parameters
-      case (Some(fp), None) => Some(fp)
-      case (None, Some(gp)) => Some(gp)
-      case (None, None) => None
-    }
-  }
-
-  private def publishTestSuiteExecution(testSuiteExecution: TestSuiteExecution): Future[Unit] = {
-    val message = testSuiteExecution.asJson.noSpaces
-    val kafkaPublisher = kafkaResourceCache.getOrCreateProducer(Constants.SystemKafkaResourceId, kafkaClient.getKafkaPublisher(kafkaConfig))
-    val record = new ProducerRecord[String, String](testSuiteExecutionTopic, testSuiteExecution.id, message)
-
-    val sendFuture = Future { kafkaPublisher.send(record).get() }
-    sendFuture.map { metadata =>
-      println(s"✅ Message sent successfully to topic: ${metadata.topic()}, partition: ${metadata.partition()}, offset: ${metadata.offset()}")
-      println(s"📝 Message content: $message")
-    }.recover {
-      case exception: Exception =>
-        println(s"❌ Failed to send message to Kafka: ${exception.getMessage}")
-        exception.printStackTrace()
-    }
+      triggeredBy = request.triggeredBy
+    )
   }
 }

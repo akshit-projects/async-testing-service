@@ -65,9 +65,9 @@ class ExecutionTable(tag: Tag) extends Table[Execution](tag, "executions") {
   def steps       =       column[String]("steps")
   def updatedAt = column[Instant]("updatedat")
   def parameters    = column[Option[String]]("parameters")
-  def testSuiteId = column[Option[String]]("testsuiteid")
+  def testSuiteExecutionId = column[Option[String]]("testsuiteexecutionid")
 
-  def * = (id.?, flowId, flowVersion, status, startedAt, completedAt, steps, updatedAt, parameters, testSuiteId) <> (
+  def * = (id.?, flowId, flowVersion, status, startedAt, completedAt, steps, updatedAt, parameters, testSuiteExecutionId) <> (
     { case (id, flowId, flowVersion, status, startedAt, completedAt, steps, updatedAt, parameters, testSuiteId) =>
       val stepsObj = DecodingUtils.decodeWithErrorLogs[List[ExecutionStep]](steps)
       val params = parameters.flatMap(DecodingUtils.decodeWithErrorLogs[Option[Map[String, String]]](_))
@@ -77,7 +77,7 @@ class ExecutionTable(tag: Tag) extends Table[Execution](tag, "executions") {
       val stepsStr = e.steps.asJson.noSpaces
       val params = e.parameters.map(_.asJson.noSpaces)
       Option(
-        (Option(e.id), e.flowId, e.flowVersion, e.status, e.startedAt, e.completedAt, stepsStr, e.updatedAt, params, e.testSuiteId)
+        (Option(e.id), e.flowId, e.flowVersion, e.status, e.startedAt, e.completedAt, stepsStr, e.updatedAt, params, e.testSuiteExecutionId)
       )
     }
   )

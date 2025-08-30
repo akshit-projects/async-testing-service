@@ -2,16 +2,15 @@ package ab.async.tester.library.repository.testsuite
 
 import ab.async.tester.domain.enums.ExecutionStatus
 import ab.async.tester.domain.testsuite.{TestSuiteExecution, TestSuiteFlowExecution}
-import ab.async.tester.library.repository.execution.ExecutionTable.{executionStatusColumnType, instantColumnType}
+import ab.async.tester.library.constants.Constants.COMPLETED_EXECUTIONS
+import ab.async.tester.library.repository.execution.ExecutionTable.executionStatusColumnType
 import ab.async.tester.library.utils.{DecodingUtils, MetricUtils}
 import com.google.inject.{ImplementedBy, Inject, Singleton}
-import io.circe.generic.auto._
 import io.circe.syntax.EncoderOps
 import play.api.Logger
 import slick.ast.BaseTypedType
 import slick.jdbc.JdbcType
 import slick.jdbc.PostgresProfile.api._
-
 
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
@@ -26,7 +25,8 @@ trait TestSuiteExecutionRepository {
   def findAll(limit: Int, page: Int, statuses: Option[List[ExecutionStatus]]): Future[List[TestSuiteExecution]]
   def insert(testSuiteExecution: TestSuiteExecution): Future[TestSuiteExecution]
   def update(testSuiteExecution: TestSuiteExecution): Future[Boolean]
-  def updateStatus(id: String, status: ExecutionStatus, completedFlows: Int, failedFlows: Int, isCompleted: Boolean = false): Future[Boolean]
+  def updateTestSuiteExecution(testSuiteExecutionId: String, executionId: String, executionStatus: ExecutionStatus): Future[Unit]
+  def updateStatus(id: String, status: ExecutionStatus): Future[Boolean]
 }
 
 @Singleton
@@ -44,7 +44,6 @@ class TestSuiteExecutionRepositoryImpl @Inject()(
         str => DecodingUtils.decodeWithErrorLogs[List[TestSuiteFlowExecution]](str)
       )
 
-
     implicit val instantColumnType: BaseColumnType[Instant] =
       MappedColumnType.base[Instant, java.sql.Timestamp](
         inst => java.sql.Timestamp.from(inst),
@@ -60,17 +59,13 @@ class TestSuiteExecutionRepositoryImpl @Inject()(
     def flowExecutions = column[List[TestSuiteFlowExecution]]("flowexecutions")
     def runUnordered = column[Boolean]("rununordered")
     def triggeredBy = column[String]("triggeredby")
-    def totalFlows = column[Int]("totalflows")
-    def completedFlows = column[Int]("completedflows")
-    def failedFlows = column[Int]("failedflows")
-
-    def * = (id, testSuiteId, testSuiteName, status, startedAt, completedAt, flowExecutions, runUnordered, triggeredBy, totalFlows, completedFlows, failedFlows) <> (
+    def * = (id, testSuiteId, testSuiteName, status, startedAt, completedAt, flowExecutions, runUnordered, triggeredBy) <> (
       {
-        case (id, testSuiteId, testSuiteName, status, startedAt, completedAt, flowExecutions, runUnordered, triggeredBy, totalFlows, completedFlows, failedFlows) =>
-          TestSuiteExecution(id, testSuiteId, testSuiteName, status, startedAt, completedAt, flowExecutions, runUnordered, triggeredBy, totalFlows, completedFlows, failedFlows)
+        case (id, testSuiteId, testSuiteName, status, startedAt, completedAt, flowExecutions, runUnordered, triggeredBy) =>
+          TestSuiteExecution(id, testSuiteId, testSuiteName, status, startedAt, completedAt, flowExecutions, runUnordered, triggeredBy)
       },
       (tse: TestSuiteExecution) => {
-        Some((tse.id, tse.testSuiteId, tse.testSuiteName, tse.status, tse.startedAt, tse.completedAt, tse.flowExecutions, tse.runUnordered, tse.triggeredBy, tse.totalFlows, tse.completedFlows, tse.failedFlows))
+        Some((tse.id, tse.testSuiteId, tse.testSuiteName, tse.status, tse.startedAt, tse.completedAt, tse.flowExecutions, tse.runUnordered, tse.triggeredBy))
       }
     )
   }
@@ -109,6 +104,7 @@ class TestSuiteExecutionRepositoryImpl @Inject()(
         .drop(page * limit)
         .take(limit)
 
+      println(query.result.statements.toString)
       db.run(query.result).map(_.toList)
     }
   }
@@ -125,9 +121,9 @@ class TestSuiteExecutionRepositoryImpl @Inject()(
     }
   }
 
-  override def updateStatus(id: String, status: ExecutionStatus, completedFlows: Int, failedFlows: Int, isCompleted: Boolean): Future[Boolean] = {
+  override def updateStatus(id: String, status: ExecutionStatus): Future[Boolean] = {
     MetricUtils.withAsyncRepositoryMetrics(repositoryName, "updateStatus") {
-      val completedAt = if (isCompleted) Some(Instant.now()) else None
+//      val completedAt = if (isCompleted) Some(Instant.now()) else None
       
       val updateQuery = testSuiteExecutions
         .filter(_.id === id)
@@ -135,6 +131,39 @@ class TestSuiteExecutionRepositoryImpl @Inject()(
 //        .update((status, completedFlows, failedFlows, completedAt))
       
       db.run(updateQuery.result).map(_.nonEmpty)
+    }
+  }
+
+  override def updateTestSuiteExecution(testSuiteExecutionId: String, executionId: String, executionStatus: ExecutionStatus): Future[Unit] = {
+    MetricUtils.withAsyncRepositoryMetrics(repositoryName, "updateTestSuiteExecution") {
+      for {
+        existingSuite <- db.run(testSuiteExecutions.filter(_.id === testSuiteExecutionId).result.headOption)
+        updatedSuite <- {
+          val suite = existingSuite.get
+          val matchingExecutionIndex = suite.flowExecutions.indexWhere(_.executionId == executionId)
+          val testSuiteExecution = if (COMPLETED_EXECUTIONS.contains(executionStatus)) {
+            suite.flowExecutions(matchingExecutionIndex).copy(status = executionStatus)
+          } else {
+            suite.flowExecutions(matchingExecutionIndex).copy(status = executionStatus, completedAt = Some(Instant.now()))
+          }
+          val updatedExecutions = suite.flowExecutions.updated(matchingExecutionIndex, testSuiteExecution)
+          val areAllUpdated = areAllExecutionsUpdated(updatedExecutions)
+          val updatedSuite = if (areAllUpdated) {
+            suite.copy(flowExecutions = updatedExecutions, status = ExecutionStatus.Completed, completedAt = Some(Instant.now()))
+          } else {
+            suite.copy(flowExecutions = updatedExecutions)
+          }
+          update(updatedSuite)
+        }
+      } yield {
+
+      }
+    }
+  }
+
+  private def areAllExecutionsUpdated(flowExecutions: List[TestSuiteFlowExecution]) = {
+    !flowExecutions.exists { execution =>
+      COMPLETED_EXECUTIONS.contains(execution.status)
     }
   }
 }

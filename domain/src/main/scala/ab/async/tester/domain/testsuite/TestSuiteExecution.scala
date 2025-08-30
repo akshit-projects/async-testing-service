@@ -51,9 +51,6 @@ case class TestSuiteExecution(
   flowExecutions: List[TestSuiteFlowExecution] = List.empty,
   runUnordered: Boolean = false,
   triggeredBy: String,
-  totalFlows: Int,
-  completedFlows: Int = 0,
-  failedFlows: Int = 0
 )
 
 object TestSuiteFlowExecution {

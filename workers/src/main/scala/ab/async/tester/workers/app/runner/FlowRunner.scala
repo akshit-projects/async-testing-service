@@ -5,19 +5,22 @@ import ab.async.tester.domain.enums.{ExecutionStatus, StepStatus}
 import ab.async.tester.domain.execution.{Execution, ExecutionStatusUpdate, ExecutionStep, StepUpdate}
 import ab.async.tester.domain.step.{FlowStep, StepError, StepResponse, StepResponseValue}
 import ab.async.tester.library.cache.RedisClient
+import ab.async.tester.library.constants.Constants.COMPLETED_EXECUTIONS
 import ab.async.tester.library.repository.execution.ExecutionRepository
+import ab.async.tester.library.repository.testsuite.TestSuiteExecutionRepository
 import ab.async.tester.library.utils.MetricUtils
 import ab.async.tester.workers.app.clients.kafka.KafkaConsumer
 import akka.actor.ActorSystem
-import io.circe.generic.auto._
+import akka.pattern.after
 import akka.stream.scaladsl.Sink
 import com.google.inject.{ImplementedBy, Inject, Singleton}
+import io.circe.generic.auto._
 import io.circe.jawn.decode
 import io.circe.syntax._
 import play.api.{Configuration, Logger}
-import redis.clients.jedis.Jedis
 
 import scala.collection.mutable.{Map => MutableMap}
+import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
@@ -47,7 +50,8 @@ class FlowRunnerImpl @Inject()(
   executionRepository: ExecutionRepository,
   stepRunnerRegistry: StepRunnerRegistry,
   redisClient: RedisClient,
-  configuration: Configuration
+  configuration: Configuration,
+  testSuiteExecutionRepository: TestSuiteExecutionRepository
 )(implicit system: ActorSystem, ec: ExecutionContext) extends FlowRunner {
 
   private implicit val logger: Logger = Logger(this.getClass)
@@ -72,9 +76,13 @@ class FlowRunnerImpl @Inject()(
         decode[Execution](messageValue) match {
           case Right(execution) =>
             logger.info(s"Processing execution: ${execution.id}")
-            executeFlow(execution).map { _ =>
-              // Commit the Kafka message after successful processing
-              msg.committableOffset
+            val initialDelay = getInitialDelay(execution.parameters).getOrElse(0)
+            after(initialDelay.milliseconds, using = system.scheduler) {
+              logger.info(s"Starting execution ${execution.id} flow after $initialDelay")
+              executeFlow(execution).map { _ =>
+                // Commit the Kafka message after successful processing
+                msg.committableOffset
+              }
             }.recover {
               case e: Exception =>
                 logger.error(s"Failed to process execution ${execution.id}: ${e.getMessage}", e)
@@ -101,16 +109,15 @@ class FlowRunnerImpl @Inject()(
       logger.info(s"Starting execution: ${execution.id}")
 
       // Update execution status to in-progress
-      publishExecutionUpdate(execution.id, "Execution started", ExecutionStatus.InProgress)
-      executionRepository.updateStatus(execution.id, ExecutionStatus.InProgress).flatMap { _ =>
-
+      updateStatus(execution, ExecutionStatus.InProgress).flatMap { _ =>
+        publishExecutionUpdate(execution.id, "Execution started", ExecutionStatus.InProgress)
         // Execute steps sequentially
         executeFlowSteps(execution.id, execution.steps).map { successful =>
           val finalStatus = if (successful) ExecutionStatus.Completed else ExecutionStatus.Failed
           val message = if (successful) "Execution completed successfully" else "Execution failed"
 
           // Update final status
-          executionRepository.updateStatus(execution.id, finalStatus).map { _ =>
+          updateStatus(execution, finalStatus).map { _ =>
             publishExecutionUpdate(execution.id, message, finalStatus)
             logger.info(s"Execution ${execution.id} completed with status: $finalStatus")
           }
@@ -118,7 +125,7 @@ class FlowRunnerImpl @Inject()(
           case e: Exception =>
             logger.error(s"Execution ${execution.id} failed with exception: ${e.getMessage}", e)
             publishExecutionUpdate(execution.id, s"Execution failed: ${e.getMessage}", ExecutionStatus.Failed)
-            executionRepository.updateStatus(execution.id, ExecutionStatus.Failed).map { _ =>
+            updateStatus(execution, ExecutionStatus.Failed).map { _ =>
               logger.info(s"Execution ${execution.id} completed with status: ${ExecutionStatus.Failed}")
             }
         }.map {_ =>
@@ -128,7 +135,30 @@ class FlowRunnerImpl @Inject()(
     }
 
   }
-  
+
+  private def updateStatus(execution: Execution, status: ExecutionStatus) = {
+    val isCompleted = COMPLETED_EXECUTIONS.contains(status)
+    val updateExecutionStatus = executionRepository.updateStatus(execution.id, status, isCompleted)
+    val updateTestSuiteExecutionStatus = execution.testSuiteExecutionId match {
+      case Some(testSuiteExecutionId) =>
+        testSuiteExecutionRepository.updateTestSuiteExecution(testSuiteExecutionId, execution.id, status)
+      case None => Future.successful(())
+    }
+
+    for {
+      _ <- updateExecutionStatus
+      _ <- updateTestSuiteExecutionStatus
+    } yield {
+      logger.info(s"Updated status for execution ${execution.id} with status $status")
+    }
+  }
+
+  private def getInitialDelay(parameters: Option[Map[String, String]]) = {
+    parameters.flatMap { params =>
+      params.get("initialDelay").map(_.toInt)
+    }
+  }
+
   /**
    * Execute steps sequentially with Redis pub/sub updates
    */

@@ -1,6 +1,6 @@
 package ab.async.tester.workers.app
 
-import ab.async.tester.workers.app.runner.{FlowRunner, TestSuiteRunner}
+import ab.async.tester.workers.app.runner.{FlowRunner}
 import com.google.inject.{Guice, Inject, Singleton}
 import play.api.{Configuration, Logger}
 import play.api.libs.ws.StandaloneWSClient
@@ -14,7 +14,6 @@ import scala.util.{Failure, Success, Try}
 @Singleton
 class WorkerApplication @Inject()(
                                    flowRunner: FlowRunner,
-                                   testSuiteRunner: TestSuiteRunner,
                                    configuration: Configuration,
                                    wsClient: StandaloneWSClient
                                  )(implicit ec: ExecutionContext) {
@@ -43,10 +42,6 @@ class WorkerApplication @Inject()(
       // Start the flow consumer
       logger.info("Starting FlowRunner consumer...")
       flowRunner.startFlowConsumer()
-
-      // Start the test suite consumer
-      logger.info("Starting TestSuiteRunner consumer...")
-      testSuiteRunner.startTestSuiteConsumer()
 
       logger.info("Worker application started successfully")
       logger.info("Worker is now consuming Kafka messages and executing flows and test suites")
