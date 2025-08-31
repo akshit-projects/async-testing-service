@@ -25,6 +25,24 @@ object MetricConstants {
     .help("API latency in seconds")
     .labelNames("endpoint")
     .register()
+
+  val AUTH_REQUESTS: Counter = Counter.build()
+    .name("auth_requests_total")
+    .help("Total auth requests")
+    .labelNames()
+    .register()
+
+  val AUTH_ERRORS: Counter = Counter.build()
+    .name("auth_errors_total")
+    .help("Total auth errors")
+    .labelNames()
+    .register()
+
+  val AUTH_HISTOGRAM_Latency: Histogram = Histogram.build()
+    .name("auth_latency_seconds")
+    .help("auth latency in seconds")
+    .labelNames()
+    .register()
   
   // Database metrics
   val DB_OPERATIONS: Counter = Counter.build()

@@ -7,15 +7,13 @@ import ab.async.tester.library.utils.MetricUtils
 import com.google.inject.Inject
 import play.api.Logger
 
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
-import scala.concurrent.duration._
 import javax.inject.Singleton
+import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton
 class ResourceServiceImpl @Inject()(
   resourceRepository: ResourceRepository
-)(implicit ec: ExecutionContext) extends ResourceServiceTrait {
+)(implicit ec: ExecutionContext) extends ResourceService {
 
   private implicit val logger: Logger = Logger(this.getClass)
   private val dbMetrics = MetricConstants.DB_OPERATIONS

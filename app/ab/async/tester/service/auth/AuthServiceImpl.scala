@@ -1,20 +1,19 @@
 package ab.async.tester.service.auth
 
 import ab.async.tester.domain.auth.GoogleClaims
-import ab.async.tester.domain.requests.auth.LoginRequest
-import ab.async.tester.domain.user.User
+import ab.async.tester.domain.requests.auth.{AdminUpdateUserRequest, LoginRequest, UpdateProfileRequest}
+import ab.async.tester.domain.user.{User, UserRole}
 import ab.async.tester.exceptions.AuthExceptions.InvalidAuthException
 import ab.async.tester.library.repository.user.UserRepository
 import com.google.inject.{Inject, Singleton}
 import pdi.jwt.{JwtAlgorithm, JwtJson, JwtOptions}
-import play.api.{Configuration, Logger}
 import play.api.libs.json.{Json, Reads}
 import play.api.libs.ws.WSClient
+import play.api.{Configuration, Logger}
 
 import java.io.ByteArrayInputStream
+import java.security.PublicKey
 import java.security.cert.CertificateFactory
-import java.security.spec.X509EncodedKeySpec
-import java.security.{KeyFactory, PublicKey}
 import java.time.Instant
 import java.util.{Base64, UUID}
 import scala.concurrent.{ExecutionContext, Future}
@@ -52,7 +51,11 @@ class AuthServiceImpl @Inject()(config: Configuration,
                     claims.exp > Instant.now.getEpochSecond
                 } match {
                   case Some(validClaims) =>
-                    upsertUser(validClaims)
+                    upsertUser(validClaims).recover {
+                      case ex: Exception =>
+                        logger.error("Exception while upserting user", ex)
+                        throw ex
+                    }
                   case None              => throw InvalidAuthException() // TODO update exception type
                 }
 
@@ -78,11 +81,12 @@ class AuthServiceImpl @Inject()(config: Configuration,
         } else {
           val newUser = User(
             id = UUID.randomUUID().toString,
-            createdAt = Instant.now().toEpochMilli,
-            modifiedAt = Instant.now().toEpochMilli,
             email = validClaims.email,
             name = validClaims.name,
+            createdAt = Instant.now().toEpochMilli,
+            modifiedAt = Instant.now().toEpochMilli,
             profilePicture = validClaims.picture,
+            lastGoogleSync = Some(Instant.now().toEpochMilli)
           )
           userRepository.upsertUser(newUser)
         }
@@ -94,13 +98,72 @@ class AuthServiceImpl @Inject()(config: Configuration,
 
   private def getUpdatedUser(existingUser: User, validClaims: GoogleClaims) = {
     var updatedUser = existingUser
-    if (validClaims.name.isDefined) {
+
+    // Only update fields that user hasn't manually modified
+    if (validClaims.name.isDefined && !existingUser.isFieldUpdatedByUser("name")) {
       updatedUser = updatedUser.copy(name = validClaims.name)
     }
-    if (validClaims.picture.isDefined) {
+    if (validClaims.picture.isDefined && !existingUser.isFieldUpdatedByUser("profilePicture")) {
       updatedUser = updatedUser.copy(profilePicture = validClaims.picture)
     }
-    updatedUser.copy(modifiedAt = Instant.now().toEpochMilli)
+
+    updatedUser.copy(
+      lastGoogleSync = Some(Instant.now().toEpochMilli),
+      modifiedAt = Instant.now().toEpochMilli
+    )
+  }
+
+  override def updateUserProfile(userId: String, updateRequest: UpdateProfileRequest): Future[User] = {
+    userRepository.getUserById(userId).flatMap {
+      case Some(existingUser) =>
+        var updatedUser = existingUser
+        var updatedFields = existingUser.userUpdatedFields
+
+
+        updateRequest.phoneNumber.foreach { phoneNumber =>
+          updatedUser = updatedUser.copy(phoneNumber = Some(phoneNumber))
+          updatedUser.markFieldAsUpdatedByUser("phoneNumber")
+        }
+        updateRequest.name.foreach { name =>
+          updatedUser = updatedUser.copy(name = Some(name))
+          updatedUser.markFieldAsUpdatedByUser("name")
+        }
+        updateRequest.bio.foreach { bio =>
+          updatedUser = updatedUser.copy(bio = Some(bio))
+          updatedUser.markFieldAsUpdatedByUser("bio")
+        }
+        updateRequest.company.foreach { company =>
+          updatedUser = updatedUser.copy(company = Some(company))
+          updatedUser.markFieldAsUpdatedByUser("company")
+        }
+
+        val finalUser = updatedUser.copy(
+          userUpdatedFields = updatedFields,
+          modifiedAt = Instant.now().toEpochMilli
+        )
+
+        userRepository.updateUserProfile(finalUser)
+      case None =>
+        throw new RuntimeException(s"User with id $userId not found")
+    }
+  }
+
+  override def getUserProfile(userId: String): Future[Option[User]] = {
+    userRepository.getUserById(userId)
+  }
+
+  override def adminUpdateUser(adminRequest: AdminUpdateUserRequest): Future[Boolean] = {
+    (adminRequest.role, adminRequest.isAdmin) match {
+      case (Some(role), Some(isAdmin)) =>
+        userRepository.updateUserRole(adminRequest.userId, role, isAdmin)
+      case (Some(role), None) =>
+        userRepository.updateUserRole(adminRequest.userId, role, role == UserRole.Admin)
+      case (None, Some(isAdmin)) =>
+        val role = if (isAdmin) UserRole.Admin else UserRole.User
+        userRepository.updateUserRole(adminRequest.userId, role, isAdmin)
+      case _ =>
+        Future.successful(false)
+    }
   }
 
   /** Fetch Google certs and return the public key for the given kid */

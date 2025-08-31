@@ -1,27 +1,47 @@
 package ab.async.tester.service.flows
 
-import ab.async.tester.constants.StepFunctions
-import ab.async.tester.domain.flow.{Floww, FlowVersion}
-import ab.async.tester.domain.step.FlowStep
+import ab.async.tester.constants.Constants
+import ab.async.tester.domain.clients.kafka.KafkaConfig
+import ab.async.tester.domain.enums.ExecutionStatus
+import ab.async.tester.domain.enums.StepStatus.IN_PROGRESS
+import ab.async.tester.domain.execution.{Execution, ExecutionStep}
+import ab.async.tester.domain.flow.{FlowVersion, Floww}
+import ab.async.tester.domain.requests.RunFlowRequest
+import ab.async.tester.domain.step.VariableSubstitution
 import ab.async.tester.exceptions.ValidationException
+import ab.async.tester.library.cache.KafkaResourceCache
+import ab.async.tester.library.clients.events.KafkaClient
+import ab.async.tester.library.repository.execution.ExecutionRepository
 import ab.async.tester.library.repository.flow.{FlowRepository, FlowVersionRepository}
 import ab.async.tester.library.utils.MetricUtils
-import akka.NotUsed
-import akka.stream.scaladsl.Source
 import com.google.inject.Singleton
-import play.api.Logger
+import com.typesafe.config.Config
+import io.circe.syntax.EncoderOps
+import org.apache.kafka.clients.producer.ProducerRecord
+import play.api.{Configuration, Logger}
 
+import java.time.Instant
 import javax.inject.Inject
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
 
 @Singleton
 class FlowServiceImpl @Inject()(
                                  flowRepository: FlowRepository,
-                                 flowVersionRepository: FlowVersionRepository
-                               )(implicit ec: ExecutionContext) extends FlowServiceTrait {
+                                 flowVersionRepository: FlowVersionRepository,
+                                 configuration: Configuration,
+                                 kafkaResourceCache: KafkaResourceCache,
+                                 kafkaClient: KafkaClient,
+                                 executionRepository: ExecutionRepository
+                               )(implicit ec: ExecutionContext) extends FlowService {
 
   private implicit val logger: Logger = Logger(this.getClass)
+  private val kafkaConfig = {
+    val conf = configuration.get[Config]("kafka")
+    KafkaConfig(
+      bootstrapServers = conf.getString("bootstrapServers"),
+    )
+  }
+  private val workerQueueTopic = configuration.get[String]("events.workerQueueTopic")
   private val serviceName = "FlowService"
 
   override def validateSteps(flow: Floww): Unit =
@@ -32,6 +52,12 @@ class FlowServiceImpl @Inject()(
       if (stepNames.distinct.length != stepNames.length) {
         val duplicates = stepNames.groupBy(identity).collect { case (n, dups) if dups.size > 1 => n }
         throw ValidationException(s"Duplicate step names found: ${duplicates.mkString(", ")}")
+      }
+
+      // Validate variable references
+      val variableErrors = VariableSubstitution.validateVariableReferences(flow.steps)
+      if (variableErrors.nonEmpty) {
+        throw ValidationException(s"Variable reference validation failed: ${variableErrors.mkString("; ")}")
       }
     }
 
@@ -124,4 +150,68 @@ class FlowServiceImpl @Inject()(
         }
       } yield result
     }
+
+
+  override def createExecution(runRequest: RunFlowRequest): Future[Execution] = {
+    val executionId = java.util.UUID.randomUUID().toString
+
+    for {
+      flow <- getFlow(runRequest.flowId).map(_.get) // TODO handle not found
+      execution <- {
+        val execution = createExecutionEntity(executionId, flow, runRequest)
+        executionRepository.saveExecution(execution).map(_ => execution)
+      }
+    } yield {
+      // Publish to Kafka for workers to pick up
+      val kafkaPublisher = kafkaResourceCache.getOrCreateProducer(Constants.SystemKafkaResourceId, kafkaClient.getKafkaPublisher(kafkaConfig))
+      val message = execution.asJson.noSpaces
+      val record = new ProducerRecord[String, String](workerQueueTopic, execution.id, message)
+
+      // Send message asynchronously and log the result
+      val sendFuture = Future { kafkaPublisher.send(record).get() }
+      sendFuture.onComplete {
+        case scala.util.Success(metadata) =>
+          println(s"✅ Message sent successfully to topic: ${metadata.topic()}, partition: ${metadata.partition()}, offset: ${metadata.offset()}")
+          println(s"📝 Message content: $message")
+        case scala.util.Failure(exception) =>
+          println(s"❌ Failed to send message to Kafka: ${exception.getMessage}")
+          exception.printStackTrace()
+      }
+
+      // Return the execution instance directly
+      execution
+    }
+  }
+
+
+
+  private def createExecutionEntity(executionId: String, flow: Floww, runFlowRequest: RunFlowRequest) = {
+    val now = Instant.now()
+    val execSteps = flow.steps.map { step =>
+      ExecutionStep(
+        id = step.id,
+        name = step.name,
+        stepType = step.stepType,
+        meta = step.meta,
+        timeoutMs = step.timeoutMs,
+        runInBackground = step.runInBackground,
+        continueOnSuccess = step.continueOnSuccess,
+        status = IN_PROGRESS,
+        startedAt = now,
+        logs = List.empty,
+        response = None
+      )
+    }
+    Execution(
+      id = executionId,
+      flowId = flow.id.get,
+      flowVersion = flow.version,
+      status = ExecutionStatus.Todo,
+      startedAt = now,
+      steps = execSteps,
+      updatedAt = now,
+      parameters = Option(runFlowRequest.params),
+      testSuiteExecutionId = runFlowRequest.testSuiteExecutionId
+    )
+  }
 }

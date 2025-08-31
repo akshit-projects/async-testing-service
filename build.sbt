@@ -51,7 +51,9 @@ lazy val circeDeps = Seq(
   "io.circe" %% "circe-parser" % circeVersion,
 )
 
-lazy val domainDeps = circeDeps
+lazy val domainDeps = circeDeps ++ Seq(
+  "org.scalatest" %% "scalatest" % "3.2.15" % Test
+)
 
 
 lazy val akkaVersion = "2.6.20"

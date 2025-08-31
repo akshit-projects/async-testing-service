@@ -4,6 +4,7 @@ import ab.async.tester.domain.enums.{StepStatus, StepType}
 import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.step.{FlowStep, StepError, StepResponse, StepResponseValue}
 import ab.async.tester.library.utils.MetricUtils
+import ab.async.tester.workers.app.substitution.VariableSubstitutionService
 import com.google.inject.{ImplementedBy, Inject, Singleton}
 import play.api.Logger
 
@@ -87,9 +88,12 @@ class StepRunnerRegistryImpl @Inject()(
  * Base class for all step runners with common functionality
  */
 abstract class BaseStepRunner(implicit ec: ExecutionContext) extends StepRunner {
-  
+
   protected implicit val logger: Logger = Logger(this.getClass)
   protected val runnerName: String
+
+  // Variable substitution service - will be injected by subclasses
+  protected def variableSubstitutionService: VariableSubstitutionService
   
   /**
    * Run a single step with timeout handling
@@ -99,10 +103,19 @@ abstract class BaseStepRunner(implicit ec: ExecutionContext) extends StepRunner 
       // Create a future for the step execution with timeout
       val timeoutMillis = step.timeoutMs
       val startTime = System.currentTimeMillis()
-      
+
       logger.info(s"Running step ${step.name} (function: ${step.stepType}, background: ${step.runInBackground})")
-      
-      val resultFuture = executeStep(step, previousResults)
+
+      // Apply variable substitution before executing the step
+      val substitutedStep = try {
+        variableSubstitutionService.substituteVariablesInStep(step, previousResults)
+      } catch {
+        case e: Exception =>
+          logger.error(s"Variable substitution failed for step ${step.name}: ${e.getMessage}", e)
+          return Future.successful(createErrorResponse(step, s"Variable substitution failed: ${e.getMessage}"))
+      }
+
+      val resultFuture = executeStep(substitutedStep, previousResults)
         .map { result =>
           val endTime = System.currentTimeMillis()
           val duration = endTime - startTime

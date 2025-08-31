@@ -28,6 +28,10 @@ object MetricUtils {
   private val repositoryErrorCounter: Counter = MetricConstants.REPOSITORY_ERRORS
   private val repositoryLatencyHistogram: Histogram = MetricConstants.REPOSITORY_HISTOGRAM_Latency
 
+  private val authCallCounter: Counter = MetricConstants.AUTH_REQUESTS
+  private val authErrorCounter: Counter = MetricConstants.AUTH_ERRORS
+  private val authLatencyHistogram: Histogram = MetricConstants.AUTH_HISTOGRAM_Latency
+
   /**
    * Measures API calls with metrics - synchronous version
    *
@@ -38,15 +42,31 @@ object MetricUtils {
    */
   def withAPIMetrics[T](endpoint: String)(fn: => T): T = {
     val timer = apiLatencyHistogram.labels(endpoint).startTimer()
+    apiCallCounter.labels(endpoint).inc()
 
     try {
       val result = fn
-      apiCallCounter.labels(endpoint, "success").inc()
       result
     } catch {
       case e: Exception =>
-        apiCallCounter.labels(endpoint, "error").inc()
+        apiCallCounter.labels(endpoint).inc()
         logger.error(s"Error in API call to $endpoint: ${e.getMessage}", e)
+        throw e
+    } finally {
+      timer.close()
+    }
+  }
+
+  def withAuthMetrics[T](fn: => T): T = {
+    val timer = authLatencyHistogram.startTimer()
+    try {
+      val result = fn
+      authCallCounter.inc()
+      result
+    } catch {
+      case e: Exception =>
+        authErrorCounter.inc()
+        logger.error(s"Error in authentication: ${e.getMessage}", e)
         throw e
     } finally {
       timer.close()

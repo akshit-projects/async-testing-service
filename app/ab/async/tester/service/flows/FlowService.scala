@@ -1,11 +1,19 @@
 package ab.async.tester.service.flows
 
-import ab.async.tester.domain.flow.{Floww, FlowVersion}
+import ab.async.tester.domain.execution.Execution
+import ab.async.tester.domain.flow.{FlowVersion, Floww}
+import ab.async.tester.domain.requests.RunFlowRequest
 import com.google.inject.ImplementedBy
 
 import scala.concurrent.Future
 @ImplementedBy(classOf[FlowServiceImpl])
-trait FlowServiceTrait {
+trait FlowService {
+
+  /**
+   * Creates execution and publishes to Kafka for workers to pick up.
+   * Returns execution details without streaming.
+   */
+  def createExecution(runRequest: RunFlowRequest): Future[Execution]
 
   /** Validates the steps of a flow, throws ValidationException if invalid */
   def validateSteps(flow: Floww): Unit

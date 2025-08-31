@@ -5,11 +5,9 @@ import ab.async.tester.domain.enums.ExecutionStatus
 import ab.async.tester.domain.execution.Execution
 import ab.async.tester.domain.requests.{RunFlowRequest, RunTestSuiteRequest}
 import ab.async.tester.domain.testsuite.{TestSuite, TestSuiteExecution, TestSuiteFlowExecution}
-import ab.async.tester.library.cache.KafkaResourceCache
-import ab.async.tester.library.clients.events.KafkaClient
 import ab.async.tester.library.repository.flow.FlowRepository
 import ab.async.tester.library.repository.testsuite.{TestSuiteExecutionRepository, TestSuiteRepository}
-import ab.async.tester.service.flows.FlowExecutionService
+import ab.async.tester.service.flows.FlowService
 import com.google.inject.{Inject, Singleton}
 import com.typesafe.config.Config
 import play.api.Configuration
@@ -26,9 +24,7 @@ class TestSuiteServiceImpl @Inject()(
                                       testSuiteRepository: TestSuiteRepository,
                                       testSuiteExecutionRepository: TestSuiteExecutionRepository,
                                       flowRepository: FlowRepository,
-                                      flowExecutionService: FlowExecutionService,
-                                      kafkaResourceCache: KafkaResourceCache,
-                                      kafkaClient: KafkaClient,
+                                      flowService: FlowService,
                                       configuration: Configuration
 )(implicit ec: ExecutionContext) extends TestSuiteService {
 
@@ -88,7 +84,7 @@ class TestSuiteServiceImpl @Inject()(
         // add initial delay to complete all processing of saving test suite
         params = request.globalParameters.getOrElse(Map.empty) ++ Map("initialDelay" -> Math.max(testSuite.flows.length * 100, 1000).toString)
       )
-      flowExecutionService.createExecution(runFlowRequest)
+      flowService.createExecution(runFlowRequest)
     }).map { executions =>
       createTestSuiteExecution(testSuite, request, executions, testSuiteExecutionId)
     }

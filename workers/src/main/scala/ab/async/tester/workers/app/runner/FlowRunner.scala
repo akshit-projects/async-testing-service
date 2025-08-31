@@ -141,7 +141,7 @@ class FlowRunnerImpl @Inject()(
     val updateExecutionStatus = executionRepository.updateStatus(execution.id, status, isCompleted)
     val updateTestSuiteExecutionStatus = execution.testSuiteExecutionId match {
       case Some(testSuiteExecutionId) =>
-        testSuiteExecutionRepository.updateTestSuiteExecutionWithLock(testSuiteExecutionId, execution.id, status)
+        testSuiteExecutionRepository.updateTestSuiteExecution(testSuiteExecutionId, execution.id, status)
       case None => Future.successful(())
     }
 

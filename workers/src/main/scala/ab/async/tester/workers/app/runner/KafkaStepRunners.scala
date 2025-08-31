@@ -8,6 +8,7 @@ import ab.async.tester.domain.step.{FlowStep, KafkaMessage, KafkaMessagesRespons
 import ab.async.tester.library.cache.{KafkaResourceCache, RedisLockManager}
 import ab.async.tester.library.clients.events.KafkaClient
 import ab.async.tester.library.repository.resource.ResourceRepository
+import ab.async.tester.workers.app.substitution.VariableSubstitutionService
 import com.google.inject.{Inject, Singleton}
 import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -24,7 +25,8 @@ import scala.util.control.Breaks.{break, breakable}
 
 @Singleton
 class KafkaPublisherStepRunner @Inject()(
-  implicit ec: ExecutionContext, 
+  protected val variableSubstitutionService: VariableSubstitutionService
+)(implicit ec: ExecutionContext,
   resourceRepository: ResourceRepository,
   kafkaResourceCache: KafkaResourceCache,
   kafkaClient: KafkaClient
@@ -104,7 +106,8 @@ class KafkaPublisherStepRunner @Inject()(
 
 @Singleton
 class KafkaConsumerStepRunner @Inject()(
-  implicit ec: ExecutionContext, 
+  protected val variableSubstitutionService: ab.async.tester.workers.app.substitution.VariableSubstitutionService
+)(implicit ec: ExecutionContext,
   resourceRepository: ResourceRepository,
   kafkaResourceCache: KafkaResourceCache,
   redisLockManager: RedisLockManager

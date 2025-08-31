@@ -6,7 +6,7 @@ import com.google.inject.ImplementedBy
 import scala.concurrent.Future
 
 @ImplementedBy(classOf[ResourceServiceImpl])
-trait ResourceServiceTrait {
+trait ResourceService {
   /**
    * Get all resources, optionally filtered by request parameters
    *
