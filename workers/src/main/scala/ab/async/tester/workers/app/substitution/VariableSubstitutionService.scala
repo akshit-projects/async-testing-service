@@ -47,6 +47,10 @@ class VariableSubstitutionService @Inject()() {
       case delayMeta: DelayStepMeta =>
         // DelayStepMeta doesn't have string fields that need substitution
         delayMeta
+      case sqlMeta: SqlStepMeta =>
+        substituteVariablesInSqlMeta(sqlMeta, stepResponses)
+      case redisMeta: RedisStepMeta =>
+        substituteVariablesInRedisMeta(redisMeta, stepResponses)
     }
   }
   
@@ -86,6 +90,33 @@ class VariableSubstitutionService @Inject()() {
           value = VariableSubstitution.substituteVariables(msg.value, stepResponses)
         )
       }
+    )
+  }
+
+  /**
+   * Substitute variables in SQL step meta
+   */
+  private def substituteVariablesInSqlMeta(meta: SqlStepMeta, stepResponses: Map[String, StepResponse]): SqlStepMeta = {
+    meta.copy(
+      query = VariableSubstitution.substituteVariables(meta.query, stepResponses),
+      parameters = meta.parameters.map(_.map { case (key, value) =>
+        key -> VariableSubstitution.substituteVariables(value, stepResponses)
+      })
+    )
+  }
+
+  /**
+   * Substitute variables in Redis step meta
+   */
+  private def substituteVariablesInRedisMeta(meta: RedisStepMeta, stepResponses: Map[String, StepResponse]): RedisStepMeta = {
+    meta.copy(
+      key = VariableSubstitution.substituteVariables(meta.key, stepResponses),
+      value = meta.value.map(VariableSubstitution.substituteVariables(_, stepResponses)),
+      field = meta.field.map(VariableSubstitution.substituteVariables(_, stepResponses)),
+      fields = meta.fields.map(_.map { case (key, value) =>
+        key -> VariableSubstitution.substituteVariables(value, stepResponses)
+      }),
+      expectedValue = meta.expectedValue.map(VariableSubstitution.substituteVariables(_, stepResponses))
     )
   }
 }

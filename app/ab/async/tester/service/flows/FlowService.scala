@@ -20,7 +20,7 @@ trait FlowService {
   def validateSteps(flow: Floww): Unit
 
   /** Gets flows based on filter criteria with pagination */
-  def getFlows(search: Option[String], flowIds: Option[List[String]], orgId: Option[String], teamId: Option[String], limit: Int, page: Int): Future[PaginatedResponse[Floww]]
+  def getFlows(search: Option[String], flowIds: Option[List[String]], orgId: Option[String], teamId: Option[String], stepTypes: Option[List[String]], limit: Int, page: Int): Future[PaginatedResponse[Floww]]
 
   /** Gets a single flow by ID */
   def getFlow(id: String): Future[Option[Floww]]

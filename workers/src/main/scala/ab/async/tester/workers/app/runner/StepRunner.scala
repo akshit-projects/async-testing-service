@@ -56,7 +56,9 @@ class StepRunnerRegistryImpl @Inject()(
   delayStepRunner: DelayStepRunner,
   kafkaPublisherStepRunner: KafkaPublisherStepRunner,
   kafkaConsumerStepRunner: KafkaConsumerStepRunner,
-)(implicit ec: ExecutionContext) extends StepRunnerRegistry {
+  sqlStepRunner: SqlStepRunner,
+  redisStepRunner: RedisStepRunner,
+) extends StepRunnerRegistry {
   
   private val runners = mutable.Map[String, StepRunner]()
   
@@ -65,6 +67,8 @@ class StepRunnerRegistryImpl @Inject()(
   registerRunner(StepType.Delay.toString, delayStepRunner)
   registerRunner(StepType.KafkaPublish.toString, kafkaPublisherStepRunner)
   registerRunner(StepType.KafkaSubscribe.toString, kafkaConsumerStepRunner)
+  registerRunner(StepType.SqlQuery.toString, sqlStepRunner)
+  registerRunner(StepType.RedisOperation.toString, redisStepRunner)
 
   /**
    * Get a runner for a specific step function
@@ -153,7 +157,7 @@ abstract class BaseStepRunner(implicit ec: ExecutionContext) extends StepRunner 
   /**
    * Create an error response for a step
    */
-  private def createErrorResponse(step: ExecutionStep, errorMessage: String): StepResponse = {
+  protected def createErrorResponse(step: ExecutionStep, errorMessage: String): StepResponse = {
     StepResponse(
       name = step.name,
       id = step.id.getOrElse(""),
@@ -169,7 +173,7 @@ abstract class BaseStepRunner(implicit ec: ExecutionContext) extends StepRunner 
   /**
    * Create a success response for a step
    */
-  protected def createSuccessResponse[T <: StepResponseValue](step: FlowStep, data: T): StepResponse = {
+  protected def createSuccessResponse[T <: StepResponseValue](step: ExecutionStep, data: T): StepResponse = {
     StepResponse(
       name = step.name,
       id = step.id.getOrElse(""),

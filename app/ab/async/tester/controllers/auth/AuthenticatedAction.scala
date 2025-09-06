@@ -80,6 +80,7 @@ class AuthenticatedAction @Inject()(
       Jwt.decode(token, jwtSecret, Seq(JwtAlgorithm.HS256)).toOption
     } match {
       case Success(claim) =>
+        if (claim.isEmpty) return None
         decode[User](claim.get.content) match {
           case Right(user) => Some(user)
           case Left(_) => None

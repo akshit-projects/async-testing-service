@@ -9,7 +9,9 @@ case class CacheConfig(id: String,
                        `type`: String,
                        name: String,
                        url: String,
-                       password: String) extends ResourceConfig {
+                       port: Int,
+                       password: Option[String],
+                       database: Option[Int]) extends ResourceConfig {
   override def getId: String = id
 
   override def getType: String = "cache"

@@ -76,6 +76,8 @@ object UserRole {
       Permissions.ORG_READ,
       Permissions.ORG_CREATE,
       Permissions.TEAMS_CREATE,
+
+      Permissions.RESOURCES_CREATE, // TODO remove
     )
   }
   

@@ -82,6 +82,10 @@ object VariableSubstitution {
         extractFromKafkaResponse(kafkaResponse, fieldPath)
       case delayResponse: DelayResponse =>
         extractFromDelayResponse(delayResponse, fieldPath)
+      case sqlResponse: SqlResponse =>
+        extractFromSqlResponse(sqlResponse, fieldPath)
+      case redisResponse: RedisResponse =>
+        extractFromRedisResponse(redisResponse, fieldPath)
       case stepError: StepError =>
         extractFromStepError(stepError, fieldPath)
     }
@@ -128,6 +132,44 @@ object VariableSubstitution {
     }
   }
   
+  /**
+   * Extract value from SQL response
+   */
+  private def extractFromSqlResponse(response: SqlResponse, fieldPath: List[String]): Option[String] = {
+    fieldPath match {
+      case "rowCount" :: Nil => Some(response.rowCount.toString)
+      case "executionTimeMs" :: Nil => Some(response.executionTimeMs.toString)
+      case "columns" :: indexStr :: Nil =>
+        Try(indexStr.toInt).toOption.flatMap { index =>
+          response.columns.lift(index)
+        }
+      case "rows" :: indexStr :: columnName :: Nil =>
+        Try(indexStr.toInt).toOption.flatMap { index =>
+          response.rows.lift(index).flatMap(_.get(columnName))
+        }
+      case "rows" :: "first" :: columnName :: Nil =>
+        response.rows.headOption.flatMap(_.get(columnName))
+      case "rows" :: "last" :: columnName :: Nil =>
+        response.rows.lastOption.flatMap(_.get(columnName))
+      case _ => None
+    }
+  }
+
+  /**
+   * Extract value from Redis response
+   */
+  private def extractFromRedisResponse(response: RedisResponse, fieldPath: List[String]): Option[String] = {
+    fieldPath match {
+      case "operation" :: Nil => Some(response.operation)
+      case "key" :: Nil => Some(response.key)
+      case "value" :: Nil => response.value
+      case "exists" :: Nil => response.exists.map(_.toString)
+      case "count" :: Nil => response.count.map(_.toString)
+      case "values" :: key :: Nil => response.values.flatMap(_.get(key))
+      case _ => None
+    }
+  }
+
   /**
    * Extract value from Step error
    */
@@ -227,10 +269,21 @@ object VariableSubstitution {
         List(kafkaSubMeta.topicName, kafkaSubMeta.groupId)
         
       case kafkaPubMeta: KafkaPublishMeta =>
-        kafkaPubMeta.topicName :: kafkaPubMeta.messages.flatMap(msg => 
+        kafkaPubMeta.topicName :: kafkaPubMeta.messages.flatMap(msg =>
           List(msg.key, Some(msg.value)).flatten
         )
-        
+
+      case sqlMeta: SqlStepMeta =>
+        List(sqlMeta.query) ++ sqlMeta.parameters.map(_.values).getOrElse(Nil)
+
+      case redisMeta: RedisStepMeta =>
+        List(
+          Some(redisMeta.key),
+          redisMeta.value,
+          redisMeta.field,
+          redisMeta.expectedValue
+        ).flatten ++ redisMeta.fields.map(_.values).getOrElse(Nil)
+
       case _: DelayStepMeta =>
         List.empty // DelayStepMeta doesn't have string fields that would contain variables
     }

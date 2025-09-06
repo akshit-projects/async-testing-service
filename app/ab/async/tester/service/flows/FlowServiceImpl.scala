@@ -8,7 +8,7 @@ import ab.async.tester.domain.enums.StepStatus.IN_PROGRESS
 import ab.async.tester.domain.execution.{Execution, ExecutionStep}
 import ab.async.tester.domain.flow.{FlowVersion, Floww}
 import ab.async.tester.domain.requests.RunFlowRequest
-import ab.async.tester.domain.step.VariableSubstitution
+import ab.async.tester.domain.step._
 import ab.async.tester.exceptions.ValidationException
 import ab.async.tester.library.cache.KafkaResourceCache
 import ab.async.tester.library.clients.events.KafkaClient
@@ -32,7 +32,8 @@ class FlowServiceImpl @Inject()(
                                  configuration: Configuration,
                                  kafkaResourceCache: KafkaResourceCache,
                                  kafkaClient: KafkaClient,
-                                 executionRepository: ExecutionRepository
+                                 executionRepository: ExecutionRepository,
+                                 resourceRepository: ab.async.tester.library.repository.resource.ResourceRepository
                                )(implicit ec: ExecutionContext) extends FlowService {
 
   private implicit val logger: Logger = Logger(this.getClass)
@@ -62,12 +63,53 @@ class FlowServiceImpl @Inject()(
       }
     }
 
+  /**
+   * Validates that all resource IDs referenced in flow steps exist in the database
+   */
+  private def validateResourceIds(steps: List[FlowStep]): Future[Unit] = {
+    val resourceIds = steps.flatMap(extractResourceId).distinct
+
+    if (resourceIds.isEmpty) {
+      Future.successful(())
+    } else {
+      Future.traverse(resourceIds) { resourceId =>
+        resourceRepository.findById(resourceId).map {
+          case Some(_) => ()
+          case None => throw ValidationException(s"Resource not found: $resourceId")
+        }
+      }.map(_ => ())
+    }
+  }
+
+  /**
+   * Extracts resource ID from a flow step meta
+   */
+  private def extractResourceId(step: FlowStep): Option[String] = {
+    step.meta match {
+      case httpMeta: HttpStepMeta => Some(httpMeta.resourceId)
+      case kafkaSubMeta: KafkaSubscribeMeta => Some(kafkaSubMeta.resourceId)
+      case kafkaPubMeta: KafkaPublishMeta => Some(kafkaPubMeta.resourceId)
+      case sqlMeta: SqlStepMeta => Some(sqlMeta.resourceId)
+      case redisMeta: RedisStepMeta => Some(redisMeta.resourceId)
+      case _: DelayStepMeta => None // Delay steps don't use resources
+    }
+  }
+
+  /**
+   * Checks if a flow contains any of the specified step types
+   */
+  private def hasStepTypes(flow: Floww, stepTypes: List[String]): Boolean = {
+    val flowStepTypes = flow.steps.map(_.stepType.toString.toLowerCase).toSet
+    stepTypes.exists(stepType => flowStepTypes.contains(stepType.toLowerCase))
+  }
+
   override def addFlow(flow: Floww): Future[Floww] =
     MetricUtils.withAsyncServiceMetrics(serviceName, "addFlow") {
       validateSteps(flow)
-      val now = System.currentTimeMillis() / 1000
-      val newFlow = flow.copy(createdAt = now, modifiedAt = now)
       for {
+        _ <- validateResourceIds(flow.steps)
+        now = System.currentTimeMillis() / 1000
+        newFlow = flow.copy(createdAt = now, modifiedAt = now)
         createdFlow <- flowRepository.insert(newFlow)
         // Create initial version record
         flowVersion = FlowVersion(
@@ -84,11 +126,18 @@ class FlowServiceImpl @Inject()(
       }
     }
 
-  override def getFlows(search: Option[String], flowIds: Option[List[String]], orgId: Option[String], teamId: Option[String], limit: Int, page: Int): Future[PaginatedResponse[Floww]] =
+  override def getFlows(search: Option[String], flowIds: Option[List[String]], orgId: Option[String], teamId: Option[String], stepTypes: Option[List[String]], limit: Int, page: Int): Future[PaginatedResponse[Floww]] =
     MetricUtils.withAsyncServiceMetrics(serviceName, "getFlows") {
       flowRepository.findAll(search, flowIds, orgId, teamId, limit, page).map { case (flows, total) =>
+        // Apply step type filtering if specified
+        val filteredFlows = stepTypes match {
+          case Some(types) if types.nonEmpty =>
+            flows.filter(flow => hasStepTypes(flow, types))
+          case _ => flows
+        }
+
         PaginatedResponse(
-          data = flows,
+          data = filteredFlows,
           pagination = PaginationMetadata(page, limit, total)
         )
       }.recover {
@@ -130,34 +179,52 @@ class FlowServiceImpl @Inject()(
     MetricUtils.withAsyncServiceMetrics(serviceName, "updateFlow") {
       validateSteps(flow)
       for {
+        _ <- validateResourceIds(flow.steps)
         existingFlowOpt <- flowRepository.findById(flow.id.getOrElse(""))
         result <- existingFlowOpt match {
           case Some(existingFlow) =>
-            val nextVersion = existingFlow.version + 1
             val now = System.currentTimeMillis() / 1000
-            val updatedFlow = flow.copy(modifiedAt = now, version = nextVersion)
-            val flowVersion = FlowVersion(
-              flowId = flow.id.get,
-              version = nextVersion,
-              steps = flow.steps,
-              createdAt = now,
-              createdBy = flow.creator,
-              description = flow.description
-            )
 
-            for {
-              // Create version record for the new version
+            // Check if only name/description changed (steps are the same)
+            val stepsChanged = existingFlow.steps != flow.steps
 
-              _ <- flowVersionRepository.insert(flowVersion)
-              // Update the main flow record
-              updateResult <- flowRepository.update(updatedFlow)
-            } yield {
-              if (updateResult) {
-                logger.info(s"Flow updated: ${flow.id.getOrElse("")} to version $nextVersion")
-              } else {
-                logger.warn(s"Flow update failed: ${flow.id.getOrElse("")}")
+            if (stepsChanged) {
+              // Steps changed, create new version
+              val nextVersion = existingFlow.version + 1
+              val updatedFlow = flow.copy(modifiedAt = now, version = nextVersion)
+              val flowVersion = FlowVersion(
+                flowId = flow.id.get,
+                version = nextVersion,
+                steps = flow.steps,
+                createdAt = now,
+                createdBy = flow.creator,
+                description = flow.description
+              )
+
+              for {
+                // Create version record for the new version
+                _ <- flowVersionRepository.insert(flowVersion)
+                // Update the main flow record
+                updateResult <- flowRepository.update(updatedFlow)
+              } yield {
+                if (updateResult) {
+                  logger.info(s"Flow updated: ${flow.id.getOrElse("")} to version $nextVersion (steps changed)")
+                } else {
+                  logger.warn(s"Flow update failed: ${flow.id.getOrElse("")}")
+                }
+                updateResult
               }
-              updateResult
+            } else {
+              // Only metadata changed, update without creating new version
+              val updatedFlow = flow.copy(modifiedAt = now, version = existingFlow.version)
+              flowRepository.update(updatedFlow).map { updateResult =>
+                if (updateResult) {
+                  logger.info(s"Flow metadata updated: ${flow.id.getOrElse("")} (no version change)")
+                } else {
+                  logger.warn(s"Flow metadata update failed: ${flow.id.getOrElse("")}")
+                }
+                updateResult
+              }
             }
           case None =>
             logger.warn(s"Flow not found for update: ${flow.id.getOrElse("")}")

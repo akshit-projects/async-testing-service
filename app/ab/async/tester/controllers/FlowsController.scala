@@ -32,9 +32,10 @@ class FlowsController @Inject()(
       val page = request.getQueryString("page").flatMap(s => scala.util.Try(s.toInt).toOption).getOrElse(0)
       val ids = request.getQueryString("ids").map(_.split(",").toList)
       val teamId = request.getQueryString("teamId")
+      val stepTypes = request.getQueryString("stepTypes").map(_.split(",").toList)
 
       // keep controller thin
-      flowService.getFlows(search, ids, orgId, teamId, limit, page).map { paginatedFlows =>
+      flowService.getFlows(search, ids, orgId, teamId, stepTypes, limit, page).map { paginatedFlows =>
         Ok(paginatedFlows.asJson.noSpaces).as("application/json")
       } recover {
         case ex =>

@@ -37,7 +37,7 @@ object ResourceConfig {
       case "kafka" => c.as[KafkaResourceConfig]
       case "http" => c.as[APISchemaConfig]
       case "cache" => c.as[CacheConfig]
-      case "db" => c.as[SQLDBConfig]
+      case "sql-db" => c.as[SQLDBConfig]
       case other => Left(DecodingFailure(s"Unknown type: $other", c.history))
     }
   }

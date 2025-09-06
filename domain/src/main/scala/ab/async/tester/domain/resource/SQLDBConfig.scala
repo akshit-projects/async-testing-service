@@ -8,8 +8,10 @@ case class SQLDBConfig(id: String,
                        `type`: String,
                        name: String,
                        dbUrl: String,
+                       port: Int,
+                       database: String,
                        username: String,
-                       password: String) extends ResourceConfig {
+                       password: Option[String]) extends ResourceConfig {
 
   override def getId: String = id
 

@@ -39,11 +39,15 @@ object StepMeta {
   implicit val kafkaSubscribeMetaDecoder: Decoder[KafkaSubscribeMeta] = deriveDecoder[KafkaSubscribeMeta]
   implicit val kafkaPublishMetaDecoder: Decoder[KafkaPublishMeta] = deriveDecoder[KafkaPublishMeta]
   implicit val delayStepMetaDecoder: Decoder[DelayStepMeta] = deriveDecoder[DelayStepMeta]
+  implicit val sqlStepMetaDecoder: Decoder[SqlStepMeta] = deriveDecoder[SqlStepMeta]
+  implicit val redisStepMetaDecoder: Decoder[RedisStepMeta] = deriveDecoder[RedisStepMeta]
 
   implicit val httpStepMetaEncoder: Encoder[HttpStepMeta] = deriveEncoder[HttpStepMeta]
   implicit val kafkaSubscribeMetaEncoder: Encoder[KafkaSubscribeMeta] = deriveEncoder[KafkaSubscribeMeta]
   implicit val kafkaPublishMetaEncoder: Encoder[KafkaPublishMeta] = deriveEncoder[KafkaPublishMeta]
   implicit val delayStepMetaEncoder: Encoder[DelayStepMeta] = deriveEncoder[DelayStepMeta]
+  implicit val sqlStepMetaEncoder: Encoder[SqlStepMeta] = deriveEncoder[SqlStepMeta]
+  implicit val redisStepMetaEncoder: Encoder[RedisStepMeta] = deriveEncoder[RedisStepMeta]
 
   // Trait encoder
   implicit val encodeStepMeta: Encoder[StepMeta] = Encoder.instance {
@@ -51,6 +55,8 @@ object StepMeta {
     case kafkaSubMeta @ KafkaSubscribeMeta(_, _, _, _, _) => kafkaSubMeta.asJson
     case kafkaPubMeta @ KafkaPublishMeta(_, _, _) => kafkaPubMeta.asJson
     case delayMeta @ DelayStepMeta(_) => delayMeta.asJson
+    case sqlMeta @ SqlStepMeta(_, _, _, _, _, _) => sqlMeta.asJson
+    case redisMeta @ RedisStepMeta(_, _, _, _, _, _, _, _, _) => redisMeta.asJson
   }
 
   // Type discriminator field for more control
@@ -63,6 +69,10 @@ object StepMeta {
       c.as[KafkaSubscribeMeta]
     } else if (c.downField("messages").succeeded) {
       c.as[KafkaPublishMeta]
+    } else if (c.downField("query").succeeded) {
+      c.as[SqlStepMeta]
+    } else if (c.downField("operation").succeeded && c.downField("key").succeeded) {
+      c.as[RedisStepMeta]
     } else {
       Left(DecodingFailure("Could not determine step meta type", c.history))
     }
