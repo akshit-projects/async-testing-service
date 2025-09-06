@@ -1,6 +1,6 @@
 package ab.async.tester.service.testsuite
 
-import ab.async.tester.domain.clients.kafka.KafkaConfig
+import ab.async.tester.domain.common.{PaginatedResponse, PaginationMetadata}
 import ab.async.tester.domain.enums.ExecutionStatus
 import ab.async.tester.domain.execution.Execution
 import ab.async.tester.domain.requests.{RunFlowRequest, RunTestSuiteRequest}
@@ -9,7 +9,6 @@ import ab.async.tester.library.repository.flow.FlowRepository
 import ab.async.tester.library.repository.testsuite.{TestSuiteExecutionRepository, TestSuiteRepository}
 import ab.async.tester.service.flows.FlowService
 import com.google.inject.{Inject, Singleton}
-import com.typesafe.config.Config
 import play.api.Configuration
 
 import java.time.Instant
@@ -28,16 +27,13 @@ class TestSuiteServiceImpl @Inject()(
                                       configuration: Configuration
 )(implicit ec: ExecutionContext) extends TestSuiteService {
 
-  private val testSuiteExecutionTopic = configuration.get[String]("events.testSuiteExecutionTopic")
-  private val kafkaConfig = {
-    val conf = configuration.get[Config]("kafka")
-    KafkaConfig(
-      bootstrapServers = conf.getString("bootstrapServers"),
-    )
-  }
-
-  override def getTestSuites(search: Option[String], creator: Option[String], enabled: Option[Boolean], limit: Int, page: Int): Future[List[TestSuite]] = {
-    testSuiteRepository.findAll(search, creator, enabled, limit, page)
+  override def getTestSuites(search: Option[String], creator: Option[String], enabled: Option[Boolean], orgId: Option[String], teamId: Option[String], limit: Int, page: Int): Future[PaginatedResponse[TestSuite]] = {
+    testSuiteRepository.findAllWithCount(search, creator, enabled, orgId, teamId, limit, page).map { case (testSuites, total) =>
+      PaginatedResponse(
+        data = testSuites,
+        pagination = PaginationMetadata(page, limit, total)
+      )
+    }
   }
 
   override def getTestSuite(id: String): Future[Option[TestSuite]] = {
@@ -90,10 +86,17 @@ class TestSuiteServiceImpl @Inject()(
     }
   }
 
-  override def getTestSuiteExecutions(testSuiteId: Option[String], limit: Int, page: Int, statuses: Option[List[ExecutionStatus]]): Future[List[TestSuiteExecution]] = {
-    testSuiteId match {
-      case Some(tsId) => testSuiteExecutionRepository.findByTestSuiteId(tsId, limit, page)
-      case None => testSuiteExecutionRepository.findAll(limit, page, statuses)
+  override def getTestSuiteExecutions(testSuiteId: Option[String], limit: Int, page: Int, statuses: Option[List[ExecutionStatus]]): Future[PaginatedResponse[TestSuiteExecution]] = {
+    val resultFuture = testSuiteId match {
+      case Some(tsId) => testSuiteExecutionRepository.findByTestSuiteIdWithCount(tsId, limit, page)
+      case None => testSuiteExecutionRepository.findAllWithCount(limit, page, statuses)
+    }
+
+    resultFuture.map { case (executions, total) =>
+      PaginatedResponse(
+        data = executions,
+        pagination = PaginationMetadata(page, limit, total)
+      )
     }
   }
 
@@ -140,4 +143,6 @@ class TestSuiteServiceImpl @Inject()(
       triggeredBy = request.triggeredBy
     )
   }
+
+
 }

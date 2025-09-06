@@ -17,6 +17,7 @@ import slick.jdbc.PostgresProfile.api._
 trait FlowVersionRepository {
   def findById(id: String): Future[Option[FlowVersion]]
   def findByFlowId(flowId: String): Future[List[FlowVersion]]
+  def findByFlowIdWithCount(flowId: String, limit: Int, page: Int): Future[(List[FlowVersion], Long)]
   def findByFlowIdAndVersion(flowId: String, version: Int): Future[Option[FlowVersion]]
   def findLatestByFlowId(flowId: String): Future[Option[FlowVersion]]
   def insert(flowVersion: FlowVersion): Future[FlowVersion]
@@ -59,6 +60,24 @@ class FlowVersionRepositoryImpl @Inject()(
   override def findByFlowId(flowId: String): Future[List[FlowVersion]] = {
     MetricUtils.withAsyncRepositoryMetrics(repositoryName, "findByFlowId") {
       db.run(flowVersions.filter(_.flowId === flowId).sortBy(_.version.desc).result).map(_.toList)
+    }
+  }
+
+  override def findByFlowIdWithCount(flowId: String, limit: Int, page: Int): Future[(List[FlowVersion], Long)] = {
+    MetricUtils.withAsyncRepositoryMetrics(repositoryName, "findByFlowIdWithCount") {
+      val baseQuery = flowVersions.filter(_.flowId === flowId)
+
+      val countQuery = baseQuery.length
+      val dataQuery = baseQuery.sortBy(_.version.desc).drop(page * limit).take(limit)
+
+      // Execute both queries in parallel for better performance
+      val countFuture = db.run(countQuery.result)
+      val dataFuture = db.run(dataQuery.result)
+
+      for {
+        count <- countFuture
+        data <- dataFuture
+      } yield (data.toList, count.toLong)
     }
   }
 

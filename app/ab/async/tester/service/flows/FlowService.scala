@@ -1,5 +1,6 @@
 package ab.async.tester.service.flows
 
+import ab.async.tester.domain.common.PaginatedResponse
 import ab.async.tester.domain.execution.Execution
 import ab.async.tester.domain.flow.{FlowVersion, Floww}
 import ab.async.tester.domain.requests.RunFlowRequest
@@ -18,14 +19,14 @@ trait FlowService {
   /** Validates the steps of a flow, throws ValidationException if invalid */
   def validateSteps(flow: Floww): Unit
 
-  /** Gets flows based on filter criteria */
-  def getFlows(search: Option[String], flowIds: Option[List[String]], limit: Int, page: Int): Future[List[Floww]]
+  /** Gets flows based on filter criteria with pagination */
+  def getFlows(search: Option[String], flowIds: Option[List[String]], orgId: Option[String], teamId: Option[String], limit: Int, page: Int): Future[PaginatedResponse[Floww]]
 
   /** Gets a single flow by ID */
   def getFlow(id: String): Future[Option[Floww]]
 
-  /** Gets all versions of a flow */
-  def getFlowVersions(flowId: String): Future[List[FlowVersion]]
+  /** Gets all versions of a flow with pagination */
+  def getFlowVersions(flowId: String, limit: Int, page: Int): Future[PaginatedResponse[FlowVersion]]
 
   /** Gets a specific version of a flow */
   def getFlowVersion(flowId: String, version: Int): Future[Option[FlowVersion]]

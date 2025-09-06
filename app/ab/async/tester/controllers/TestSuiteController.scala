@@ -31,11 +31,13 @@ class TestSuiteController @Inject()(
     MetricUtils.withAPIMetrics("getTestSuites") {
       val search = request.getQueryString("search")
       val creator = request.getQueryString("creator")
+      val orgId = request.getQueryString("orgId")
+      val teamId = request.getQueryString("teamId")
       val enabled = request.getQueryString("enabled").flatMap(s => Try(s.toBoolean).toOption)
       val limit = request.getQueryString("limit").flatMap(s => Try(s.toInt).toOption).getOrElse(10)
       val page = request.getQueryString("page").flatMap(s => Try(s.toInt).toOption).getOrElse(0)
 
-      testSuiteService.getTestSuites(search, creator, enabled, limit, page).map { testSuites =>
+      testSuiteService.getTestSuites(search, creator, enabled, orgId, teamId, limit, page).map { testSuites =>
         Ok(testSuites.asJson.noSpaces).as("application/json")
       }.recover {
         case ex =>

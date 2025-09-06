@@ -1,5 +1,6 @@
 package ab.async.tester.service.execution
 
+import ab.async.tester.domain.common.{PaginatedResponse, PaginationMetadata}
 import ab.async.tester.domain.enums.ExecutionStatus
 import ab.async.tester.domain.execution.Execution
 import ab.async.tester.library.clients.redis.RedisPubSubService
@@ -10,17 +11,22 @@ import akka.stream.scaladsl.Source
 import com.google.inject.{Inject, Singleton}
 import io.circe.Json
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton
-class ExecutionsServiceImpl @Inject()(executionRepository: ExecutionRepository, redisPubSubService: RedisPubSubService)(implicit mat: Materializer) extends ExecutionsService {
+class ExecutionsServiceImpl @Inject()(executionRepository: ExecutionRepository, redisPubSubService: RedisPubSubService)(implicit mat: Materializer, ec: ExecutionContext) extends ExecutionsService {
 
   def getExecutionById(executionId: String): Future[Option[Execution]] = {
     executionRepository.findById(executionId)
   }
 
-  def getExecutions(pageNumber: Int, pageSize: Int, statuses: Option[List[ExecutionStatus]]): Future[List[Execution]] = {
-    executionRepository.getExecutions(pageNumber, pageSize, statuses)
+  def getExecutions(pageNumber: Int, pageSize: Int, statuses: Option[List[ExecutionStatus]]): Future[PaginatedResponse[Execution]] = {
+    executionRepository.getExecutions(pageNumber, pageSize, statuses).map { case (executions, total) =>
+      PaginatedResponse(
+        data = executions,
+        pagination = PaginationMetadata(pageNumber, pageSize, total)
+      )
+    }
   }
 
   override def streamExecutionUpdates(executionId: String, clientId: Option[String]): Source[String, NotUsed] = {

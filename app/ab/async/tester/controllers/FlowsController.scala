@@ -24,17 +24,18 @@ class FlowsController @Inject()(
 
   private val logger = Logger(this.getClass)
 
-  /** GET /v1/flows?search=&limit=&page=&ids= */
-  def getFlows: Action[AnyContent] = authorizedAction.requirePermission(Permissions.FLOWS_READ).async { implicit request =>
+  /** GET /v1/flows?search=&limit=&page=&ids=&orgId=&teamId= */
+  def getFlows(orgId: Option[String]): Action[AnyContent] = authorizedAction.requirePermission(Permissions.FLOWS_READ).async { implicit request =>
     MetricUtils.withAPIMetrics("getFlows") {
       val search = request.getQueryString("search")
       val limit = request.getQueryString("limit").flatMap(s => scala.util.Try(s.toInt).toOption).getOrElse(10)
       val page = request.getQueryString("page").flatMap(s => scala.util.Try(s.toInt).toOption).getOrElse(0)
       val ids = request.getQueryString("ids").map(_.split(",").toList)
+      val teamId = request.getQueryString("teamId")
 
       // keep controller thin
-      flowService.getFlows(search, ids, limit, page).map { flows =>
-        Ok(flows.asJson.noSpaces).as("application/json")
+      flowService.getFlows(search, ids, orgId, teamId, limit, page).map { paginatedFlows =>
+        Ok(paginatedFlows.asJson.noSpaces).as("application/json")
       } recover {
         case ex =>
           logger.error("getFlows failed", ex)
@@ -108,11 +109,14 @@ class FlowsController @Inject()(
     }
   }
 
-  /** GET /v1/flows/:flowId/versions - get all versions of a flow */
+  /** GET /v1/flows/:flowId/versions?limit=&page= - get all versions of a flow */
   def getFlowVersions(flowId: String): Action[AnyContent] = authorizedAction.requirePermission(Permissions.FLOWS_READ).async { implicit request =>
     MetricUtils.withAPIMetrics("getFlowVersions") {
-      flowService.getFlowVersions(flowId).map { versions =>
-        Ok(versions.asJson.noSpaces).as("application/json")
+      val limit = request.getQueryString("limit").flatMap(s => scala.util.Try(s.toInt).toOption).getOrElse(10)
+      val page = request.getQueryString("page").flatMap(s => scala.util.Try(s.toInt).toOption).getOrElse(0)
+
+      flowService.getFlowVersions(flowId, limit, page).map { paginatedVersions =>
+        Ok(paginatedVersions.asJson.noSpaces).as("application/json")
       } recover {
         case ex =>
           logger.error(s"getFlowVersions $flowId failed", ex)

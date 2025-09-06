@@ -1,5 +1,6 @@
 package ab.async.tester.service.testsuite
 
+import ab.async.tester.domain.common.PaginatedResponse
 import ab.async.tester.domain.requests.RunTestSuiteRequest
 import ab.async.tester.domain.testsuite.{TestSuite, TestSuiteExecution}
 import ab.async.tester.domain.enums.ExecutionStatus
@@ -14,9 +15,9 @@ import scala.concurrent.Future
 trait TestSuiteService {
   
   /**
-   * Get all test suites with optional filtering
+   * Get all test suites with optional filtering and pagination
    */
-  def getTestSuites(search: Option[String], creator: Option[String], enabled: Option[Boolean], limit: Int, page: Int): Future[List[TestSuite]]
+  def getTestSuites(search: Option[String], creator: Option[String], enabled: Option[Boolean], orgId: Option[String], teamId: Option[String], limit: Int, page: Int): Future[PaginatedResponse[TestSuite]]
   
   /**
    * Get a single test suite by ID
@@ -44,9 +45,9 @@ trait TestSuiteService {
   def triggerTestSuite(request: RunTestSuiteRequest): Future[TestSuiteExecution]
   
   /**
-   * Get test suite executions
+   * Get test suite executions with pagination
    */
-  def getTestSuiteExecutions(testSuiteId: Option[String], limit: Int, page: Int, statuses: Option[List[ExecutionStatus]]): Future[List[TestSuiteExecution]]
+  def getTestSuiteExecutions(testSuiteId: Option[String], limit: Int, page: Int, statuses: Option[List[ExecutionStatus]]): Future[PaginatedResponse[TestSuiteExecution]]
   
   /**
    * Get a specific test suite execution

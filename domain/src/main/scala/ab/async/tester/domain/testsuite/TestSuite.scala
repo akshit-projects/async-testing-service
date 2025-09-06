@@ -36,7 +36,9 @@ case class TestSuite(
   runUnordered: Boolean = false,
   createdAt: Long = System.currentTimeMillis(),
   modifiedAt: Long = System.currentTimeMillis(),
-  enabled: Boolean = true
+  enabled: Boolean = true,
+  orgId: Option[String] = None,
+  teamId: Option[String] = None
 )
 
 object TestSuiteFlowConfig {

@@ -16,7 +16,7 @@ import slick.jdbc.PostgresProfile.api._
 @ImplementedBy(classOf[FlowRepositoryImpl])
 trait FlowRepository {
   def findById(id: String): Future[Option[Floww]]
-  def findAll(search: Option[String], flowIds: Option[List[String]], limit: Int, page: Int): Future[List[Floww]]
+  def findAll(search: Option[String], flowIds: Option[List[String]], orgId: Option[String], teamId: Option[String], limit: Int, page: Int): Future[(List[Floww], Long)]
   def insert(flow: Floww): Future[Floww]
   def update(flow: Floww): Future[Boolean]
   def findByName(name: String): Future[Option[Floww]]
@@ -44,15 +44,16 @@ class FlowRepositoryImpl @Inject()(
     def createdAt   = column[Long]("created_at")
     def modifiedAt  = column[Long]("modified_at")
     def version     = column[Int]("flow_version")
+    def orgId       = column[Option[String]]("org_id")
+    def teamId      = column[Option[String]]("team_id")
 
-    def * = (id, name, description, creator, steps, createdAt, modifiedAt, version) <> (
+    def * = (id, name, description, creator, steps, createdAt, modifiedAt, version, orgId, teamId) <> (
       {
-        case (id, name, description, creator, steps, createdAt, modifiedAt, version) =>
-//          val stepsObj = decode[List[FlowStep]](steps).getOrElse(Nil)
-          Floww(id, name, description, creator, steps, createdAt, modifiedAt, version)
+        case (id, name, description, creator, steps, createdAt, modifiedAt, version, orgId, teamId) =>
+          Floww(id, name, description, creator, steps, createdAt, modifiedAt, version, orgId, teamId)
       },
       (f: Floww) => {
-        Some((f.id, f.name, f.description, f.creator, f.steps, f.createdAt, f.modifiedAt, f.version))
+        Some((f.id, f.name, f.description, f.creator, f.steps, f.createdAt, f.modifiedAt, f.version, f.orgId, f.teamId))
       }
     )
   }
@@ -71,19 +72,43 @@ class FlowRepositoryImpl @Inject()(
     }
   }
 
-  override def findAll(search: Option[String], flowIds: Option[List[String]], limit: Int, page: Int): Future[List[Floww]] = {
-    MetricUtils.withAsyncRepositoryMetrics(repositoryName, "findAll") {
-      var query = flows.drop(page * limit).take(limit)
+  private def buildFlowQuery(search: Option[String], flowIds: Option[List[String]], orgId: Option[String], teamId: Option[String]) = {
+    var query = flows.asInstanceOf[Query[FlowTable, Floww, Seq]]
 
-      search.filter(_.nonEmpty).foreach { s =>
-        query = query.filter(_.name.toLowerCase like s"%${s.toLowerCase}%")
-      }
+    search.filter(_.nonEmpty).foreach { s =>
+      query = query.filter(_.name.toLowerCase like s"%${s.toLowerCase}%")
+    }
 
-      flowIds.filter(_.nonEmpty).foreach { ids =>
-        query = query.filter(_.id inSet ids)
-      }
+    flowIds.filter(_.nonEmpty).foreach { ids =>
+      query = query.filter(_.id inSet ids)
+    }
 
-      db.run(query.result).map(_.toList)
+    orgId.foreach { orgIdValue =>
+      query = query.filter(_.orgId === Option(orgIdValue))
+    }
+
+    teamId.foreach { teamIdValue =>
+      query = query.filter(_.teamId === Option(teamIdValue))
+    }
+
+    query
+  }
+
+  override def findAll(search: Option[String], flowIds: Option[List[String]], orgId: Option[String], teamId: Option[String], limit: Int, page: Int): Future[(List[Floww], Long)] = {
+    MetricUtils.withAsyncRepositoryMetrics(repositoryName, "findAllWithCount") {
+      val query = buildFlowQuery(search, flowIds, orgId, teamId)
+
+      val countQuery = query.length
+      val dataQuery = query.drop(page * limit).take(limit)
+
+      // Execute both queries in parallel for better performance
+      val countFuture = db.run(countQuery.result)
+      val dataFuture = db.run(dataQuery.result)
+
+      for {
+        count <- countFuture
+        data <- dataFuture
+      } yield (data.toList, count.toLong)
     }
   }
 

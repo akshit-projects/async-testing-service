@@ -23,7 +23,9 @@ import scala.concurrent.{ExecutionContext, Future}
 trait TestSuiteExecutionRepository {
   def findById(id: String): Future[Option[TestSuiteExecution]]
   def findByTestSuiteId(testSuiteId: String, limit: Int, page: Int): Future[List[TestSuiteExecution]]
+  def findByTestSuiteIdWithCount(testSuiteId: String, limit: Int, page: Int): Future[(List[TestSuiteExecution], Long)]
   def findAll(limit: Int, page: Int, statuses: Option[List[ExecutionStatus]]): Future[List[TestSuiteExecution]]
+  def findAllWithCount(limit: Int, page: Int, statuses: Option[List[ExecutionStatus]]): Future[(List[TestSuiteExecution], Long)]
   def insert(testSuiteExecution: TestSuiteExecution): Future[TestSuiteExecution]
   def update(testSuiteExecution: TestSuiteExecution): Future[Boolean]
   def updateTestSuiteExecution(testSuiteExecutionId: String, executionId: String, executionStatus: ExecutionStatus): Future[Unit]
@@ -87,8 +89,26 @@ class TestSuiteExecutionRepositoryImpl @Inject()(
 //        .sortBy(_.startedAt.desc)
         .drop(page * limit)
         .take(limit)
-      
+
       db.run(query.result).map(_.toList)
+    }
+  }
+
+  override def findByTestSuiteIdWithCount(testSuiteId: String, limit: Int, page: Int): Future[(List[TestSuiteExecution], Long)] = {
+    MetricUtils.withAsyncRepositoryMetrics(repositoryName, "findByTestSuiteIdWithCount") {
+      val baseQuery = testSuiteExecutions.filter(_.testSuiteId === testSuiteId)
+
+      val countQuery = baseQuery.length
+      val dataQuery = baseQuery.drop(page * limit).take(limit)
+
+      // Execute both queries in parallel for better performance
+      val countFuture = db.run(countQuery.result)
+      val dataFuture = db.run(dataQuery.result)
+
+      for {
+        count <- countFuture
+        data <- dataFuture
+      } yield (data.toList, count.toLong)
     }
   }
 
@@ -106,8 +126,30 @@ class TestSuiteExecutionRepositoryImpl @Inject()(
         .drop(page * limit)
         .take(limit)
 
-      println(query.result.statements.toString)
       db.run(query.result).map(_.toList)
+    }
+  }
+
+  override def findAllWithCount(limit: Int, page: Int, statuses: Option[List[ExecutionStatus]]): Future[(List[TestSuiteExecution], Long)] = {
+    MetricUtils.withAsyncRepositoryMetrics(repositoryName, "findAllWithCount") {
+      val baseQuery = statuses match {
+        case Some(s) if s.nonEmpty =>
+          testSuiteExecutions.filter(_.status.inSet(s))
+        case _ =>
+          testSuiteExecutions
+      }
+
+      val countQuery = baseQuery.length
+      val dataQuery = baseQuery.drop(page * limit).take(limit)
+
+      // Execute both queries in parallel for better performance
+      val countFuture = db.run(countQuery.result)
+      val dataFuture = db.run(dataQuery.result)
+
+      for {
+        count <- countFuture
+        data <- dataFuture
+      } yield (data.toList, count.toLong)
     }
   }
 

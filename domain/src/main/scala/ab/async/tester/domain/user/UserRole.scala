@@ -17,6 +17,16 @@ object Permissions {
   val FLOWS_UPDATE = "flows:update"
   val FLOWS_DELETE = "flows:delete"
 
+  val ORG_READ = "org:read"
+  val ORG_CREATE = "org:create"
+  val ORG_UPDATE = "org:update"
+  val ORG_DELETE = "org:delete"
+
+  val TEAMS_READ = "teams:read"
+  val TEAMS_CREATE = "teams:create"
+  val TEAMS_UPDATE = "teams:update"
+  val TEAMS_DELETE = "teams:delete"
+
   // Execution permissions
   val EXECUTIONS_READ = "executions:read"
   val EXECUTIONS_CREATE = "executions:create"
@@ -62,6 +72,10 @@ object UserRole {
       Permissions.RESOURCES_READ,
       Permissions.PROFILE_READ,
       Permissions.PROFILE_UPDATE,
+      Permissions.TEAMS_READ,
+      Permissions.ORG_READ,
+      Permissions.ORG_CREATE,
+      Permissions.TEAMS_CREATE,
     )
   }
   

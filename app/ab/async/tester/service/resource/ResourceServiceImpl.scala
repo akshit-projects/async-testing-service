@@ -1,5 +1,6 @@
 package ab.async.tester.service.resource
 
+import ab.async.tester.domain.common.{PaginatedResponse, PaginationMetadata}
 import ab.async.tester.domain.resource.ResourceConfig
 import ab.async.tester.library.metrics.MetricConstants
 import ab.async.tester.library.repository.resource.ResourceRepository
@@ -26,14 +27,19 @@ class ResourceServiceImpl @Inject()(
    * @param request the filter criteria for resources
    * @return list of resource configs
    */
-  override def getResources(typesOpt: Option[List[String]], groupOpt: Option[String], namespaceOpt: Option[String]): Future[List[ResourceConfig]] = {
+  override def getResources(typesOpt: Option[List[String]], groupOpt: Option[String], namespaceOpt: Option[String], limit: Int, page: Int): Future[PaginatedResponse[ResourceConfig]] = {
     MetricUtils.withAsyncServiceMetrics(serviceName, "getResources") {
-        resourceRepository.findAll(typesOpt, groupOpt, namespaceOpt).recover {
-          case e: Exception =>
-            logger.error(s"Error retrieving resources: ${e.getMessage}", e)
-            List.empty
-        }
+      resourceRepository.findAllWithCount(typesOpt, groupOpt, namespaceOpt, limit, page).map { case (resources, total) =>
+        PaginatedResponse(
+          data = resources,
+          pagination = PaginationMetadata(page, limit, total)
+        )
+      }.recover {
+        case e: Exception =>
+          logger.error(s"Error retrieving resources with pagination: ${e.getMessage}", e)
+          PaginatedResponse(List.empty, PaginationMetadata(page, limit, 0))
       }
+    }
   }
   
   /**

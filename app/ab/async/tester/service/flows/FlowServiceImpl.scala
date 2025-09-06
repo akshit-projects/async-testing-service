@@ -2,6 +2,7 @@ package ab.async.tester.service.flows
 
 import ab.async.tester.constants.Constants
 import ab.async.tester.domain.clients.kafka.KafkaConfig
+import ab.async.tester.domain.common.{PaginatedResponse, PaginationMetadata}
 import ab.async.tester.domain.enums.ExecutionStatus
 import ab.async.tester.domain.enums.StepStatus.IN_PROGRESS
 import ab.async.tester.domain.execution.{Execution, ExecutionStep}
@@ -83,12 +84,17 @@ class FlowServiceImpl @Inject()(
       }
     }
 
-  override def getFlows(search: Option[String], flowIds: Option[List[String]], limit: Int, page: Int): Future[List[Floww]] =
+  override def getFlows(search: Option[String], flowIds: Option[List[String]], orgId: Option[String], teamId: Option[String], limit: Int, page: Int): Future[PaginatedResponse[Floww]] =
     MetricUtils.withAsyncServiceMetrics(serviceName, "getFlows") {
-      flowRepository.findAll(search, flowIds, limit, page).recover {
+      flowRepository.findAll(search, flowIds, orgId, teamId, limit, page).map { case (flows, total) =>
+        PaginatedResponse(
+          data = flows,
+          pagination = PaginationMetadata(page, limit, total)
+        )
+      }.recover {
         case e: Exception =>
-          logger.error(s"Error retrieving flows: ${e.getMessage}", e)
-          Nil
+          logger.error(s"Error retrieving flows with pagination: ${e.getMessage}", e)
+          PaginatedResponse(Nil, PaginationMetadata(page, limit, 0))
       }
     }
 
@@ -101,9 +107,18 @@ class FlowServiceImpl @Inject()(
       }
     }
 
-  override def getFlowVersions(flowId: String): Future[List[FlowVersion]] =
+  override def getFlowVersions(flowId: String, limit: Int, page: Int): Future[PaginatedResponse[FlowVersion]] =
     MetricUtils.withAsyncServiceMetrics(serviceName, "getFlowVersions") {
-      flowVersionRepository.findByFlowId(flowId)
+      flowVersionRepository.findByFlowIdWithCount(flowId, limit, page).map { case (versions, total) =>
+        PaginatedResponse(
+          data = versions,
+          pagination = PaginationMetadata(page, limit, total)
+        )
+      }.recover {
+        case e: Exception =>
+          logger.error(s"Error retrieving flow versions for flow $flowId: ${e.getMessage}", e)
+          PaginatedResponse(Nil, PaginationMetadata(page, limit, 0))
+      }
     }
 
   override def getFlowVersion(flowId: String, version: Int): Future[Option[FlowVersion]] =

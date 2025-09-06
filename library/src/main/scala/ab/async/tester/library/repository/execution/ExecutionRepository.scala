@@ -22,7 +22,7 @@ import scala.concurrent.{ExecutionContext, Future}
 trait ExecutionRepository {
   def saveExecution(execution: Execution): Future[Execution]
   def findById(id: String): Future[Option[Execution]]
-  def getExecutions(pageNumber: Int, pageSize: Int, statuses: Option[List[ExecutionStatus]]): Future[List[Execution]]
+  def getExecutions(pageNumber: Int, pageSize: Int, statuses: Option[List[ExecutionStatus]]): Future[(List[Execution], Int)]
   def updateStatus(id: String, status: ExecutionStatus, isCompleted: Boolean = false): Future[Boolean]
   def updateExecutionStep(id: String, stepId: String, step: ExecutionStep): Future[Boolean]
 }
@@ -124,7 +124,7 @@ class ExecutionRepositoryImpl @Inject()(db: Database)(implicit ec: ExecutionCont
                               pageNumber: Int,
                               pageSize: Int,
                               statuses: Option[List[ExecutionStatus]]
-                            ): Future[List[Execution]] = {
+                            ): Future[(List[Execution], Int)] = {
     val baseQuery = statuses match {
       case Some(s) if s.nonEmpty =>
         executions.filter(_.status.inSet(s)) // use inSet (binds automatically for enums with BaseColumnType)
@@ -137,7 +137,15 @@ class ExecutionRepositoryImpl @Inject()(db: Database)(implicit ec: ExecutionCont
       .drop(pageNumber * pageSize) // page offset
       .take(pageSize)
 
-    db.run(query.result).map(_.toList)
+    val countResponse = db.run(baseQuery.length.result)
+    val executionsResponse = db.run(query.result).map(_.toList)
+
+    for {
+      count <- countResponse
+      executions <- executionsResponse
+    } yield {
+      (executions, count)
+    }
   }
 
   override def updateExecutionStep(id: String, stepId: String, step: ExecutionStep): Future[Boolean] = {

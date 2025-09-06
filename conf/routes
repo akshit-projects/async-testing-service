@@ -1,4 +1,4 @@
-GET     /api/v1/flows                           ab.async.tester.controllers.FlowsController.getFlows
+GET     /api/v1/flows                           ab.async.tester.controllers.FlowsController.getFlows(orgId: Option[String])
 POST    /api/v1/flows                          ab.async.tester.controllers.FlowsController.addFlow()
 PUT     /api/v1/flows                          ab.async.tester.controllers.FlowsController.updateFlow()
 POST    /api/v1/flows/run                      ab.async.tester.controllers.FlowsController.runFlow()
@@ -25,6 +25,20 @@ GET     /api/v1/test-suites/:id                ab.async.tester.controllers.TestS
 GET     /api/v1/test-suite-executions          ab.async.tester.controllers.TestSuiteController.getTestSuiteExecutions()
 GET     /api/v1/test-suite-executions/:id      ab.async.tester.controllers.TestSuiteController.getTestSuiteExecution(id: String)
 
+# Organisation endpoints
+GET     /api/v1/organisations                  ab.async.tester.controllers.OrganisationsController.getOrganisations(search: Option[String] ?= None, limit: Option[Int] ?= None, page: Option[Int] ?= None)
+POST    /api/v1/organisations                  ab.async.tester.controllers.OrganisationsController.createOrganisation()
+GET     /api/v1/organisations/:id              ab.async.tester.controllers.OrganisationsController.getOrganisation(id: String)
+PUT     /api/v1/organisations/:id              ab.async.tester.controllers.OrganisationsController.updateOrganisation(id: String)
+DELETE  /api/v1/organisations/:id              ab.async.tester.controllers.OrganisationsController.deleteOrganisation(id: String)
+
+# Team endpoints
+GET     /api/v1/teams                          ab.async.tester.controllers.TeamsController.getTeams(search: Option[String] ?= None, orgId: Option[String] ?= None, limit: Option[Int] ?= None, page: Option[Int] ?= None)
+POST    /api/v1/teams                          ab.async.tester.controllers.TeamsController.createTeam()
+GET     /api/v1/teams/:id                      ab.async.tester.controllers.TeamsController.getTeam(id: String)
+PUT     /api/v1/teams/:id                      ab.async.tester.controllers.TeamsController.updateTeam(id: String)
+DELETE  /api/v1/teams/:id                      ab.async.tester.controllers.TeamsController.deleteTeam(id: String)
+GET     /api/v1/organisations/:orgId/teams     ab.async.tester.controllers.TeamsController.getTeamsByOrganisation(orgId: String)
 
 # Resource endpoints
 GET     /api/v1/resources          ab.async.tester.controllers.ResourceController.getResources

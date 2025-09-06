@@ -1,5 +1,6 @@
 package ab.async.tester.service.resource
 
+import ab.async.tester.domain.common.PaginatedResponse
 import ab.async.tester.domain.resource.ResourceConfig
 import com.google.inject.ImplementedBy
 
@@ -8,12 +9,16 @@ import scala.concurrent.Future
 @ImplementedBy(classOf[ResourceServiceImpl])
 trait ResourceService {
   /**
-   * Get all resources, optionally filtered by request parameters
+   * Get all resources with pagination, optionally filtered by request parameters
    *
-   * @param request the filter criteria for resources
-   * @return list of resource configs
+   * @param typesOpt optional list of resource types to filter by
+   * @param groupOpt optional group to filter by
+   * @param namespaceOpt optional namespace to filter by
+   * @param limit number of items per page
+   * @param page page number (0-based)
+   * @return paginated response with resources and metadata
    */
-  def getResources(typesOpt: Option[List[String]], groupOpt: Option[String], namespaceOpt: Option[String]): Future[List[ResourceConfig]]
+  def getResources(typesOpt: Option[List[String]], groupOpt: Option[String], namespaceOpt: Option[String], limit: Int, page: Int): Future[PaginatedResponse[ResourceConfig]]
   
   /**
    * Get a resource by ID

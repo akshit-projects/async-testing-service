@@ -27,9 +27,11 @@ class ResourceController @Inject()(
       val typesOpt = request.getQueryString("types").map(_.split(",").toList)
       val groupOpt = request.getQueryString("group")
       val namespaceOpt = request.getQueryString("namespace")
+      val limit = request.getQueryString("limit").flatMap(s => scala.util.Try(s.toInt).toOption).getOrElse(50)
+      val page = request.getQueryString("page").flatMap(s => scala.util.Try(s.toInt).toOption).getOrElse(0)
 
-      resourceService.getResources(typesOpt, groupOpt, namespaceOpt).map { res =>
-        Ok(res.asJson.noSpaces)
+      resourceService.getResources(typesOpt, groupOpt, namespaceOpt, limit, page).map { paginatedRes =>
+        Ok(paginatedRes.asJson.noSpaces)
       } recover {
         case ex =>
           logger.error("getResources failed", ex)

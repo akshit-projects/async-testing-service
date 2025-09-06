@@ -17,6 +17,7 @@ import scala.concurrent.{ExecutionContext, Future}
 trait ResourceRepository {
   def findById(id: String): Future[Option[ResourceConfig]]
   def findAll(typesOpt: Option[List[String]], groupOpt: Option[String], namespaceOpt: Option[String]): Future[List[ResourceConfig]]
+  def findAllWithCount(typesOpt: Option[List[String]], groupOpt: Option[String], namespaceOpt: Option[String], limit: Int, page: Int): Future[(List[ResourceConfig], Long)]
   def create(resource: ResourceConfig): Future[ResourceConfig]
   def update(resource: ResourceConfig): Future[Option[ResourceConfig]]
   def delete(id: String): Future[Boolean]
@@ -58,15 +59,37 @@ class ResourceRepositoryImpl @Inject()(db: Database)(implicit ec: ExecutionConte
       db.run(q)
     }
 
+  private def buildResourceQuery(typesOpt: Option[List[String]], groupOpt: Option[String], namespaceOpt: Option[String]) = {
+    var query = table.map(t => t)
+
+    typesOpt.foreach { types => query = query.filter(_.`type`.inSet(types)) }
+    groupOpt.foreach { g => query = query.filter(_.group === Option(g)) }
+    namespaceOpt.foreach { ns => query = query.filter(_.namespace === Option(ns)) }
+
+    query
+  }
+
   override def findAll(typesOpt: Option[List[String]], groupOpt: Option[String], namespaceOpt: Option[String]): Future[List[ResourceConfig]] =
     MetricUtils.withAsyncRepositoryMetrics(repositoryName, "findAll") {
-      var query = table.map(t => t)
-
-      typesOpt.foreach { types => query = query.filter(_.`type`.inSet(types)) }
-      groupOpt.foreach { g => query = query.filter(_.group === Option(g)) }
-      namespaceOpt.foreach { ns => query = query.filter(_.namespace === Option(ns)) }
-
+      val query = buildResourceQuery(typesOpt, groupOpt, namespaceOpt)
       db.run(query.result).map(_.toList)
+    }
+
+  override def findAllWithCount(typesOpt: Option[List[String]], groupOpt: Option[String], namespaceOpt: Option[String], limit: Int, page: Int): Future[(List[ResourceConfig], Long)] =
+    MetricUtils.withAsyncRepositoryMetrics(repositoryName, "findAllWithCount") {
+      val query = buildResourceQuery(typesOpt, groupOpt, namespaceOpt)
+
+      val countQuery = query.length
+      val dataQuery = query.drop(page * limit).take(limit)
+
+      // Execute both queries in parallel for better performance
+      val countFuture = db.run(countQuery.result)
+      val dataFuture = db.run(dataQuery.result)
+
+      for {
+        count <- countFuture
+        data <- dataFuture
+      } yield (data.toList, count.toLong)
     }
 
   override def findByUniqueFields(resource: ResourceConfig): Future[Option[ResourceConfig]] =

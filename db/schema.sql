@@ -12,6 +12,32 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- =====================================================
+-- USERS TABLE
+-- Based on: domain/user/User.scala
+-- =====================================================
+CREATE TABLE users (
+    id VARCHAR(255) PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    name VARCHAR(255),
+    first_name VARCHAR(255),
+    last_name VARCHAR(255),
+    profile_picture TEXT,
+    phone_number VARCHAR(50),
+    company VARCHAR(255),
+    role VARCHAR(50) NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+    is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+    user_updated_fields TEXT, -- Array of field names that user has manually updated
+    last_google_sync BIGINT, -- Timestamp of last Google data sync
+    created_at BIGINT NOT NULL,
+    modified_at BIGINT NOT NULL
+);
+
+-- Indexes for users table
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_is_admin ON users(is_admin);
+
+-- =====================================================
 -- FLOWS TABLE
 -- Based on: domain/flow/Floww.scala
 -- =====================================================

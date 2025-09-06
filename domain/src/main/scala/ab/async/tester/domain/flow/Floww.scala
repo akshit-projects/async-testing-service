@@ -13,7 +13,9 @@ case class Floww(
                   steps: List[FlowStep],
                   createdAt: Long = System.currentTimeMillis(),
                   modifiedAt: Long = System.currentTimeMillis(),
-                  version: Int = 1
+                  version: Int = 1,
+                  orgId: Option[String] = None,
+                  teamId: Option[String] = None
                 )
 
 object Floww {

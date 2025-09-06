@@ -18,7 +18,8 @@ import scala.concurrent.{ExecutionContext, Future}
 @ImplementedBy(classOf[TestSuiteRepositoryImpl])
 trait TestSuiteRepository {
   def findById(id: String): Future[Option[TestSuite]]
-  def findAll(search: Option[String], creator: Option[String], enabled: Option[Boolean], limit: Int, page: Int): Future[List[TestSuite]]
+  def findAll(search: Option[String], creator: Option[String], enabled: Option[Boolean], orgId: Option[String], teamId: Option[String], limit: Int, page: Int): Future[List[TestSuite]]
+  def findAllWithCount(search: Option[String], creator: Option[String], enabled: Option[Boolean], orgId: Option[String], teamId: Option[String], limit: Int, page: Int): Future[(List[TestSuite], Long)]
   def insert(testSuite: TestSuite): Future[TestSuite]
   def update(testSuite: TestSuite): Future[Boolean]
   def delete(id: String): Future[Boolean]
@@ -49,14 +50,16 @@ class TestSuiteRepositoryImpl @Inject()(
     def createdAt = column[Long]("createdat")
     def modifiedAt = column[Long]("modifiedat")
     def enabled = column[Boolean]("enabled")
+    def orgId = column[Option[String]]("org_id")
+    def teamId = column[Option[String]]("team_id")
 
-    def * = (id, name, description, creator, flows, runUnordered, createdAt, modifiedAt, enabled) <> (
+    def * = (id, name, description, creator, flows, runUnordered, createdAt, modifiedAt, enabled, orgId, teamId) <> (
       {
-        case (id, name, description, creator, flows, runUnordered, createdAt, modifiedAt, enabled) =>
-          TestSuite(id, name, description, creator, flows, runUnordered, createdAt, modifiedAt, enabled)
+        case (id, name, description, creator, flows, runUnordered, createdAt, modifiedAt, enabled, orgId, teamId) =>
+          TestSuite(id, name, description, creator, flows, runUnordered, createdAt, modifiedAt, enabled, orgId, teamId)
       },
       (ts: TestSuite) => {
-        Some((ts.id, ts.name, ts.description, ts.creator, ts.flows, ts.runUnordered, ts.createdAt, ts.modifiedAt, ts.enabled))
+        Some((ts.id, ts.name, ts.description, ts.creator, ts.flows, ts.runUnordered, ts.createdAt, ts.modifiedAt, ts.enabled, ts.orgId, ts.teamId))
       }
     )
   }
@@ -75,23 +78,54 @@ class TestSuiteRepositoryImpl @Inject()(
     }
   }
 
-  override def findAll(search: Option[String], creator: Option[String], enabled: Option[Boolean], limit: Int, page: Int): Future[List[TestSuite]] = {
+  private def buildTestSuiteQuery(search: Option[String], creator: Option[String], enabled: Option[Boolean], orgId: Option[String], teamId: Option[String]) = {
+    var query = testSuites.asInstanceOf[Query[TestSuiteTable, TestSuite, Seq]]
+
+    search.filter(_.nonEmpty).foreach { s =>
+      query = query.filter(_.name.toLowerCase like s"%${s.toLowerCase}%")
+    }
+
+    creator.filter(_.nonEmpty).foreach { c =>
+      query = query.filter(_.creator === c)
+    }
+
+    enabled.foreach { e =>
+      query = query.filter(_.enabled === e)
+    }
+
+    orgId.foreach { orgIdValue =>
+      query = query.filter(_.orgId === Option(orgIdValue))
+    }
+
+    teamId.foreach { teamIdValue =>
+      query = query.filter(_.teamId === Option(teamIdValue))
+    }
+
+    query
+  }
+
+  override def findAll(search: Option[String], creator: Option[String], enabled: Option[Boolean], orgId: Option[String], teamId: Option[String], limit: Int, page: Int): Future[List[TestSuite]] = {
     MetricUtils.withAsyncRepositoryMetrics(repositoryName, "findAll") {
-      var query = testSuites.drop(page * limit).take(limit)
+      val query = buildTestSuiteQuery(search, creator, enabled, orgId, teamId)
+      db.run(query.drop(page * limit).take(limit).sortBy(_.modifiedAt.desc).result).map(_.toList)
+    }
+  }
 
-      search.filter(_.nonEmpty).foreach { s =>
-        query = query.filter(_.name.toLowerCase like s"%${s.toLowerCase}%")
-      }
+  override def findAllWithCount(search: Option[String], creator: Option[String], enabled: Option[Boolean], orgId: Option[String], teamId: Option[String], limit: Int, page: Int): Future[(List[TestSuite], Long)] = {
+    MetricUtils.withAsyncRepositoryMetrics(repositoryName, "findAllWithCount") {
+      val query = buildTestSuiteQuery(search, creator, enabled, orgId, teamId)
 
-      creator.filter(_.nonEmpty).foreach { c =>
-        query = query.filter(_.creator === c)
-      }
+      val countQuery = query.length
+      val dataQuery = query.drop(page * limit).take(limit).sortBy(_.modifiedAt.desc)
 
-      enabled.foreach { e =>
-        query = query.filter(_.enabled === e)
-      }
+      // Execute both queries in parallel for better performance
+      val countFuture = db.run(countQuery.result)
+      val dataFuture = db.run(dataQuery.result)
 
-      db.run(query.sortBy(_.modifiedAt.desc).result).map(_.toList)
+      for {
+        count <- countFuture
+        data <- dataFuture
+      } yield (data.toList, count.toLong)
     }
   }
 
