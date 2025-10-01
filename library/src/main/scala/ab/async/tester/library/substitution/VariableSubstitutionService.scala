@@ -1,4 +1,4 @@
-package ab.async.tester.workers.app.substitution
+package ab.async.tester.library.substitution
 
 import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.step._

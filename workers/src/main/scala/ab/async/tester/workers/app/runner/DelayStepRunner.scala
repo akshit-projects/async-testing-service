@@ -3,7 +3,7 @@ package ab.async.tester.workers.app.runner
 import ab.async.tester.domain.enums.StepStatus
 import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.step.{DelayResponse, DelayStepMeta, FlowStep, StepResponse}
-import ab.async.tester.workers.app.substitution.VariableSubstitutionService
+import ab.async.tester.library.substitution.VariableSubstitutionService
 import akka.actor.ActorSystem
 import akka.pattern.after
 import com.google.inject.{Inject, Singleton}

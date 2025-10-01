@@ -4,6 +4,7 @@ import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.resource.CacheConfig
 import ab.async.tester.domain.step.{RedisOperation, RedisResponse, RedisStepMeta, StepResponse}
 import ab.async.tester.library.repository.resource.ResourceRepository
+import ab.async.tester.library.substitution.VariableSubstitutionService
 import com.google.inject.{Inject, Singleton}
 import redis.clients.jedis.{Jedis, JedisPool, JedisPoolConfig}
 
@@ -16,7 +17,7 @@ import scala.jdk.CollectionConverters._
 @Singleton
 class RedisStepRunner @Inject()(
   resourceRepository: ResourceRepository,
-  protected val variableSubstitutionService: ab.async.tester.workers.app.substitution.VariableSubstitutionService
+  protected val variableSubstitutionService: VariableSubstitutionService
 )(implicit ec: ExecutionContext) extends BaseStepRunner {
   
   override protected val runnerName: String = "RedisStepRunner"

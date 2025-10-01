@@ -2,17 +2,16 @@ package ab.async.tester.library.repository.execution
 
 import ab.async.tester.domain.enums.ExecutionStatus
 import ab.async.tester.domain.execution.{Execution, ExecutionStep}
+import ab.async.tester.domain.variable.VariableValue
+import ab.async.tester.library.repository.execution.ExecutionTable.{executionStatusColumnType, instantColumnType}
 import ab.async.tester.library.utils.{DecodingUtils, MetricUtils}
 import com.google.inject.{ImplementedBy, Inject, Singleton}
 import io.circe.syntax.EncoderOps
-import io.circe.generic.auto._
 import play.api.Logger
 import slick.jdbc.PostgresProfile.api._
 import ab.async.tester.library.repository.execution.ExecutionTable.instantColumnType
-import ab.async.tester.library.repository.execution.ExecutionTable.executionStatusColumnType
 
 import java.time.Instant
-import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -63,21 +62,24 @@ class ExecutionTable(tag: Tag) extends Table[Execution](tag, "executions") {
   def startedAt       = column[Instant]("startedat")
   def completedAt       = column[Option[Instant]]("completedat")
   def steps       =       column[String]("steps")
+  def variables       =       column[Option[String]]("variables")
   def updatedAt = column[Instant]("updatedat")
   def parameters    = column[Option[String]]("parameters")
   def testSuiteExecutionId = column[Option[String]]("testsuiteexecutionid")
 
-  def * = (id.?, flowId, flowVersion, status, startedAt, completedAt, steps, updatedAt, parameters, testSuiteExecutionId) <> (
-    { case (id, flowId, flowVersion, status, startedAt, completedAt, steps, updatedAt, parameters, testSuiteExecutionId) =>
+  def * = (id.?, flowId, flowVersion, status, startedAt, completedAt, steps, updatedAt, parameters, variables, testSuiteExecutionId) <> (
+    { case (id, flowId, flowVersion, status, startedAt, completedAt, steps, updatedAt, parameters, variables, testSuiteExecutionId) =>
       val stepsObj = DecodingUtils.decodeWithErrorLogs[List[ExecutionStep]](steps)
+      val variablesObj = DecodingUtils.decodeWithErrorLogs[List[VariableValue]](variables.getOrElse("[]"))
       val params = parameters.flatMap(DecodingUtils.decodeWithErrorLogs[Option[Map[String, String]]](_))
-      Execution(id.get, flowId, flowVersion, status, startedAt, completedAt, stepsObj, updatedAt, params, testSuiteExecutionId)
+      Execution(id.get, flowId, flowVersion, status, startedAt, completedAt, stepsObj, updatedAt, params, variablesObj, testSuiteExecutionId)
     },
     (e: Execution) => {
       val stepsStr = e.steps.asJson.noSpaces
       val params = e.parameters.map(_.asJson.noSpaces)
+      val variables = e.variables.asJson.noSpaces
       Option(
-        (Option(e.id), e.flowId, e.flowVersion, e.status, e.startedAt, e.completedAt, stepsStr, e.updatedAt, params, e.testSuiteExecutionId)
+        (Option(e.id), e.flowId, e.flowVersion, e.status, e.startedAt, e.completedAt, stepsStr, e.updatedAt, params, Some(variables), e.testSuiteExecutionId)
       )
     }
   )

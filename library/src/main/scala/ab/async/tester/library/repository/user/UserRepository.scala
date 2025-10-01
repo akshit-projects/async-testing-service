@@ -18,4 +18,9 @@ trait UserRepository {
 
   def updateUserRole(userId: String, role: UserRole, isAdmin: Boolean): Future[Boolean]
 
+  def findAll(search: Option[String], limit: Int, page: Int): Future[(List[User], Int)]
+
+  def updateUserMetadata(userId: String, orgIds: Option[List[String]],
+                         teamIds: Option[List[String]], role: Option[UserRole], isAdmin: Option[Boolean], isActive: Option[Boolean]): Future[Boolean]
+
 }

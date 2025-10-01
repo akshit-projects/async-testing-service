@@ -16,6 +16,7 @@ object Permissions {
   val FLOWS_CREATE = "flows:create"
   val FLOWS_UPDATE = "flows:update"
   val FLOWS_DELETE = "flows:delete"
+  val FLOWS_EXECUTE = "flows:execute"
 
   val ORG_READ = "org:read"
   val ORG_CREATE = "org:create"
@@ -76,6 +77,7 @@ object UserRole {
       Permissions.ORG_READ,
       Permissions.ORG_CREATE,
       Permissions.TEAMS_CREATE,
+      Permissions.FLOWS_EXECUTE,
 
       Permissions.RESOURCES_CREATE, // TODO remove
     )

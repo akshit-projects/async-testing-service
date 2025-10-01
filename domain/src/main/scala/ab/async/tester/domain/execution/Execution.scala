@@ -1,6 +1,7 @@
 package ab.async.tester.domain.execution
 
 import ab.async.tester.domain.enums.ExecutionStatus
+import ab.async.tester.domain.variable.VariableValue
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import io.circe.{Decoder, Encoder}
 
@@ -18,6 +19,7 @@ case class Execution(
   steps: List[ExecutionStep],
   updatedAt: Instant,
   parameters: Option[Map[String, String]] = None,
+  variables: List[VariableValue] = List.empty,
   testSuiteExecutionId: Option[String] = None
 )
 

@@ -1,6 +1,7 @@
 package ab.async.tester.domain.flow
 
 import ab.async.tester.domain.step.FlowStep
+import ab.async.tester.domain.variable.FlowVariable
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import io.circe.{Decoder, Encoder}
 
@@ -11,6 +12,7 @@ case class Floww(
                   description: Option[String] = None,
                   creator: String,
                   steps: List[FlowStep],
+                  variables: List[FlowVariable] = List.empty,
                   createdAt: Long = System.currentTimeMillis(),
                   modifiedAt: Long = System.currentTimeMillis(),
                   version: Int = 1,

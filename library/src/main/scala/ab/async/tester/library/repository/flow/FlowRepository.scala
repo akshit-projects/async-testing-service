@@ -2,6 +2,7 @@ package ab.async.tester.library.repository.flow
 
 import ab.async.tester.domain.flow.Floww
 import ab.async.tester.domain.step.FlowStep
+import ab.async.tester.domain.variable.FlowVariable
 import ab.async.tester.library.utils.MetricUtils
 import com.google.inject.{ImplementedBy, Inject, Singleton}
 import io.circe.jawn.decode
@@ -9,9 +10,9 @@ import io.circe.syntax.EncoderOps
 import play.api.Logger
 import slick.ast.BaseTypedType
 import slick.jdbc.JdbcType
+import slick.jdbc.PostgresProfile.api._
 
 import scala.concurrent.{ExecutionContext, Future}
-import slick.jdbc.PostgresProfile.api._
 
 @ImplementedBy(classOf[FlowRepositoryImpl])
 trait FlowRepository {
@@ -36,24 +37,30 @@ class FlowRepositoryImpl @Inject()(
       str   => decode[List[FlowStep]](str).getOrElse(Nil) // read from JSON
     )
 
+    implicit val flowVariableColumnType: JdbcType[List[FlowVariable]] with BaseTypedType[List[FlowVariable]] = MappedColumnType.base[List[FlowVariable], String](
+      variables => variables.asJson.noSpaces,
+      str   => decode[List[FlowVariable]](str).getOrElse(Nil)
+    )
+
     def id          = column[Option[String]]("id", O.PrimaryKey)
     def name        = column[String]("name")
     def description = column[Option[String]]("description")
     def creator     = column[String]("creator")
     def steps       = column[List[FlowStep]]("steps")
+    def variables   = column[Option[List[FlowVariable]]]("variables")
     def createdAt   = column[Long]("created_at")
     def modifiedAt  = column[Long]("modified_at")
     def version     = column[Int]("flow_version")
     def orgId       = column[Option[String]]("org_id")
     def teamId      = column[Option[String]]("team_id")
 
-    def * = (id, name, description, creator, steps, createdAt, modifiedAt, version, orgId, teamId) <> (
+    def * = (id, name, description, creator, steps, variables, createdAt, modifiedAt, version, orgId, teamId) <> (
       {
-        case (id, name, description, creator, steps, createdAt, modifiedAt, version, orgId, teamId) =>
-          Floww(id, name, description, creator, steps, createdAt, modifiedAt, version, orgId, teamId)
+        case (id, name, description, creator, steps, variables, createdAt, modifiedAt, version, orgId, teamId) =>
+          Floww(id, name, description, creator, steps, variables.getOrElse(List.empty), createdAt, modifiedAt, version, orgId, teamId)
       },
       (f: Floww) => {
-        Some((f.id, f.name, f.description, f.creator, f.steps, f.createdAt, f.modifiedAt, f.version, f.orgId, f.teamId))
+        Some((f.id, f.name, f.description, f.creator, f.steps, Some(f.variables), f.createdAt, f.modifiedAt, f.version, f.orgId, f.teamId))
       }
     )
   }

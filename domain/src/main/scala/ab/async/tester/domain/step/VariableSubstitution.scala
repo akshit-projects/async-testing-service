@@ -3,6 +3,7 @@ package ab.async.tester.domain.step
 import io.circe.Json
 import io.circe.parser._
 
+import scala.collection.mutable
 import scala.util.Try
 import scala.util.matching.Regex
 
@@ -217,8 +218,8 @@ object VariableSubstitution {
    * @return List of validation errors
    */
   def validateVariableReferences(steps: List[FlowStep]): List[String] = {
-    val errors = scala.collection.mutable.ListBuffer[String]()
-    val availableSteps = scala.collection.mutable.Set[String]()
+    val errors = mutable.ListBuffer[String]()
+    val availableSteps = mutable.Set[String]()
     
     steps.foreach { step =>
       // Check variable references in this step
@@ -244,7 +245,8 @@ object VariableSubstitution {
     stringFields.foreach { field =>
       val varRefs = extractVariableReferences(field)
       varRefs.foreach { varRef =>
-        if (!availableSteps.contains(varRef.stepName)) {
+        if (varRef.originalExpression.startsWith("variables")) {}
+        else if (!availableSteps.contains(varRef.stepName)) {
           errors += s"Step '${step.name}' references undefined step '${varRef.stepName}' in expression '${varRef.originalExpression}'"
         }
       }

@@ -78,7 +78,8 @@ class TestSuiteServiceImpl @Inject()(
         flowId = flow.flowId,
         testSuiteExecutionId = Some(testSuiteExecutionId),
         // add initial delay to complete all processing of saving test suite
-        params = request.globalParameters.getOrElse(Map.empty) ++ Map("initialDelay" -> Math.max(testSuite.flows.length * 100, 1000).toString)
+        params = request.globalParameters.getOrElse(Map.empty) ++ Map("initialDelay" -> Math.max(testSuite.flows.length * 100, 1000).toString),
+        variables = List.empty // TODO take from request and pass it here
       )
       flowService.createExecution(runFlowRequest)
     }).map { executions =>

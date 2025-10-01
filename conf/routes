@@ -57,3 +57,8 @@ PUT      /api/v1/profile                 ab.async.tester.controllers.AuthControl
 
 # Admin endpoints
 PUT      /api/v1/admin/users             ab.async.tester.controllers.AuthController.adminUpdateUser
+
+# User Management endpoints
+GET      /api/v1/users                   ab.async.tester.controllers.UserManagementController.getAllUsers(search: Option[String] ?= None, limit: Int ?= 50, page: Int ?= 0)
+GET      /api/v1/users/:id               ab.async.tester.controllers.UserManagementController.getUserById(id: String)
+PUT      /api/v1/users/:id               ab.async.tester.controllers.UserManagementController.updateUser(id: String)

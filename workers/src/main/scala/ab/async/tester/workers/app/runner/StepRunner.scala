@@ -3,8 +3,8 @@ package ab.async.tester.workers.app.runner
 import ab.async.tester.domain.enums.{StepStatus, StepType}
 import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.step.{FlowStep, StepError, StepResponse, StepResponseValue}
+import ab.async.tester.library.substitution.VariableSubstitutionService
 import ab.async.tester.library.utils.MetricUtils
-import ab.async.tester.workers.app.substitution.VariableSubstitutionService
 import com.google.inject.{ImplementedBy, Inject, Singleton}
 import play.api.Logger
 

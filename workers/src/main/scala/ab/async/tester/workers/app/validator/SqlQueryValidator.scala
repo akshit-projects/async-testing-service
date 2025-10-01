@@ -1,6 +1,7 @@
 package ab.async.tester.workers.app.validator
 
-import com.typesafe.config.Config
+import com.typesafe.config.{Config, ConfigFactory}
+
 import javax.inject.{Inject, Singleton}
 import scala.util.matching.Regex
 import scala.jdk.CollectionConverters._
@@ -9,8 +10,10 @@ import scala.jdk.CollectionConverters._
  * Validator for SQL queries to ensure only safe SELECT operations are allowed
  */
 @Singleton
-class SqlQueryValidator @Inject()(config: Config) {
+class SqlQueryValidator {
 
+
+  private val config = ConfigFactory.load()
   // Load configuration
   private val maxRows = config.getInt("sql.security.maxRows")
   private val allowedTables = config.getStringList("sql.security.allowedTables").asScala.toSet

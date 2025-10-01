@@ -4,10 +4,12 @@ import ab.async.tester.domain.enums.StepStatus.IN_PROGRESS
 import ab.async.tester.domain.enums.{ExecutionStatus, StepStatus}
 import ab.async.tester.domain.execution.{Execution, ExecutionStatusUpdate, ExecutionStep, StepUpdate}
 import ab.async.tester.domain.step.{FlowStep, StepError, StepResponse, StepResponseValue}
+import ab.async.tester.domain.variable.VariableValue
 import ab.async.tester.library.cache.RedisClient
 import ab.async.tester.library.constants.Constants.COMPLETED_EXECUTIONS
 import ab.async.tester.library.repository.execution.ExecutionRepository
 import ab.async.tester.library.repository.testsuite.TestSuiteExecutionRepository
+import ab.async.tester.library.substitution.RuntimeVariableSubstitution
 import ab.async.tester.library.utils.MetricUtils
 import ab.async.tester.workers.app.clients.kafka.KafkaConsumer
 import akka.actor.ActorSystem
@@ -106,13 +108,13 @@ class FlowRunnerImpl @Inject()(
    */
   override def executeFlow(execution: Execution): Future[Unit] = {
     MetricUtils.withAsyncServiceMetrics(runnerName, "executeFlow") {
-      logger.info(s"Starting execution: ${execution.id}")
+      logger.info(s"Starting execution: ${execution.id} with ${execution.variables.length} variables")
 
       // Update execution status to in-progress
       updateStatus(execution, ExecutionStatus.InProgress).flatMap { _ =>
         publishExecutionUpdate(execution.id, "Execution started", ExecutionStatus.InProgress)
         // Execute steps sequentially
-        executeFlowSteps(execution.id, execution.steps).map { successful =>
+        executeFlowSteps(execution.id, execution.steps, execution.variables).map { successful =>
           val finalStatus = if (successful) ExecutionStatus.Completed else ExecutionStatus.Failed
           val message = if (successful) "Execution completed successfully" else "Execution failed"
 
@@ -162,7 +164,7 @@ class FlowRunnerImpl @Inject()(
   /**
    * Execute steps sequentially with Redis pub/sub updates
    */
-  private def executeFlowSteps(executionId: String, steps: List[ExecutionStep]): Future[Boolean] = {
+  private def executeFlowSteps(executionId: String, steps: List[ExecutionStep], variables: List[VariableValue] = List.empty): Future[Boolean] = {
     // Tracks results of all completed steps by name
     val stepResults = MutableMap.empty[String, StepResponse]
 
@@ -175,6 +177,23 @@ class FlowRunnerImpl @Inject()(
 
       val stepId = step.id.get
       val updatedStep = step.copy(status = IN_PROGRESS) // TODO add updatedAt
+
+      // Apply runtime variable substitution to the step
+      val steps = if (variables.nonEmpty) {
+        val flowStep = FlowStep(
+          name = step.name,
+          stepType = step.stepType,
+          meta = step.meta,
+          timeoutMs = step.timeoutMs,
+          runInBackground = step.runInBackground,
+          continueOnSuccess = step.continueOnSuccess
+        )
+        val substitutedSteps = RuntimeVariableSubstitution.substituteVariablesInSteps(List(flowStep), variables)
+        step.copy(meta = substitutedSteps.head.meta)
+      } else {
+        step
+      }
+
       // Publish step started update
       executionRepository.updateExecutionStep(executionId, stepId, updatedStep).flatMap { _ =>
         publishStepUpdate(executionId, stepId, "Step started", StepStatus.IN_PROGRESS)
@@ -182,9 +201,9 @@ class FlowRunnerImpl @Inject()(
         // Find the appropriate runner for this step
         val runner = stepRunnerRegistry.getRunnerForStep(step.stepType)
 
-        // Execute the step with the current results
+        // Execute the step with the current results (using the step with substituted variables)
         val allResults = stepResults.values.toList
-        runner.runStep(step, allResults)
+        runner.runStep(steps, allResults)
       }
     }
     

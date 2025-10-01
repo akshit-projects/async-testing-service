@@ -3,10 +3,10 @@ package ab.async.tester.workers.app.runner
 import ab.async.tester.domain.enums.StepStatus
 import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.resource.APISchemaConfig
-import ab.async.tester.domain.step.{FlowStep, HttpResponse, HttpStepMeta, StepError, StepResponse}
+import ab.async.tester.domain.step.{HttpResponse, HttpStepMeta, StepError, StepResponse}
 import ab.async.tester.library.repository.resource.ResourceRepository
+import ab.async.tester.library.substitution.VariableSubstitutionService
 import ab.async.tester.workers.app.matchers.ResponseMatcher
-import ab.async.tester.workers.app.substitution.VariableSubstitutionService
 import com.google.inject.{Inject, Singleton}
 import play.api.libs.ws.StandaloneWSClient
 

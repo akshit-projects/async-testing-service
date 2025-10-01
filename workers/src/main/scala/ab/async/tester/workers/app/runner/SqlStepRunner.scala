@@ -4,6 +4,7 @@ import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.resource.SQLDBConfig
 import ab.async.tester.domain.step.{SqlResponse, SqlStepMeta, StepResponse}
 import ab.async.tester.library.repository.resource.ResourceRepository
+import ab.async.tester.library.substitution.VariableSubstitutionService
 import ab.async.tester.workers.app.validator.SqlQueryValidator
 import com.google.inject.{Inject, Singleton}
 
@@ -17,7 +18,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class SqlStepRunner @Inject()(
   resourceRepository: ResourceRepository,
   sqlQueryValidator: SqlQueryValidator,
-  protected val variableSubstitutionService: ab.async.tester.workers.app.substitution.VariableSubstitutionService
+  protected val variableSubstitutionService: VariableSubstitutionService
 )(implicit ec: ExecutionContext) extends BaseStepRunner {
   
   override protected val runnerName: String = "SqlStepRunner"
@@ -54,13 +55,13 @@ class SqlStepRunner @Inject()(
     // Get database resource
     resourceRepository.findById(sqlMeta.resourceId).flatMap {
       case Some(resource: SQLDBConfig) =>
-        executeQueryWithResource(step, sqlMeta, resource)
+        executeQueryWithResource(step, sqlMeta, resource, processedQuery)
       case None =>
         Future.successful(createErrorResponse(step, s"Database resource not found: ${sqlMeta.resourceId}"))
     }
   }
 
-  private def executeQueryWithResource(step: ExecutionStep, sqlMeta: SqlStepMeta, resource: SQLDBConfig): Future[StepResponse] = {
+  private def executeQueryWithResource(step: ExecutionStep, sqlMeta: SqlStepMeta, resource: SQLDBConfig, processedQuery: String): Future[StepResponse] = {
     Future {
       val startTime = System.currentTimeMillis()
       
