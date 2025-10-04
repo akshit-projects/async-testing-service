@@ -3,12 +3,11 @@ package ab.async.tester.service.flows
 import ab.async.tester.constants.Constants
 import ab.async.tester.domain.clients.kafka.KafkaConfig
 import ab.async.tester.domain.common.{PaginatedResponse, PaginationMetadata}
-import ab.async.tester.domain.enums.ExecutionStatus
-import ab.async.tester.domain.enums.StepStatus.IN_PROGRESS
-import ab.async.tester.domain.execution.{Execution, ExecutionStep}
+import ab.async.tester.domain.execution.Execution
 import ab.async.tester.domain.flow.{FlowVersion, Floww}
 import ab.async.tester.domain.requests.RunFlowRequest
 import ab.async.tester.domain.step._
+import ab.async.tester.domain.variable.{VariableValidator, VariableValue}
 import ab.async.tester.exceptions.ValidationException
 import ab.async.tester.library.cache.KafkaResourceCache
 import ab.async.tester.library.clients.events.KafkaClient
@@ -21,7 +20,6 @@ import io.circe.syntax.EncoderOps
 import org.apache.kafka.clients.producer.ProducerRecord
 import play.api.{Configuration, Logger}
 
-import java.time.Instant
 import javax.inject.Inject
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -46,7 +44,7 @@ class FlowServiceImpl @Inject()(
   private val workerQueueTopic = configuration.get[String]("events.workerQueueTopic")
   private val serviceName = "FlowService"
 
-  override def validateSteps(flow: Floww): Unit =
+  override def validateFlow(flow: Floww): Unit =
     MetricUtils.withServiceMetrics(serviceName, "validateSteps") {
       if (flow.steps.isEmpty) throw ValidationException("Flow must have at least one step")
 
@@ -61,6 +59,7 @@ class FlowServiceImpl @Inject()(
       if (variableErrors.nonEmpty) {
         throw ValidationException(s"Variable reference validation failed: ${variableErrors.mkString("; ")}")
       }
+      validateFlowVariables(flow)
     }
 
   /**
@@ -99,13 +98,67 @@ class FlowServiceImpl @Inject()(
    * Checks if a flow contains any of the specified step types
    */
   private def hasStepTypes(flow: Floww, stepTypes: List[String]): Boolean = {
-    val flowStepTypes = flow.steps.map(_.stepType.toString.toLowerCase).toSet
+    val flowStepTypes = flow.steps.map(_.stepType.stringified).toSet
     stepTypes.exists(stepType => flowStepTypes.contains(stepType.toLowerCase))
+  }
+
+  /**
+   * Validates flow variable definitions
+   */
+  private def validateFlowVariables(flow: Floww): Unit = {
+    // Check for duplicate variable names
+    val variableNames = flow.variables.map(_.name)
+    if (variableNames.distinct.length != variableNames.length) {
+      val duplicates = variableNames.groupBy(identity).collect { case (n, dups) if dups.size > 1 => n }
+      throw ValidationException(s"Duplicate variable names found: ${duplicates.mkString(", ")}")
+    }
+
+    // Validate variable names (alphanumeric + underscore, starting with letter)
+    val invalidNames = flow.variables.filter(v => !v.name.matches("^[a-zA-Z][a-zA-Z0-9_]*$"))
+    if (invalidNames.nonEmpty) {
+      throw ValidationException(s"Invalid variable names: ${invalidNames.map(_.name).mkString(", ")}. Variable names must start with a letter and contain only alphanumeric characters and underscores.")
+    }
+
+    flow.variables.foreach { variable =>
+      variable.defaultValue.foreach { defaultValue =>
+        val validationResult = VariableValidator.validateValue(defaultValue, variable.`type`)
+        if (!validationResult.isValid) {
+          logger.error(s"Invalid default value for variable '${variable.name}': ${validationResult.errors.mkString(", ")}")
+          throw ValidationException(s"Invalid default value for variable '${variable.name}': ${validationResult.errors.mkString(", ")}")
+        }
+      }
+    }
+  }
+
+  /**
+   * Validates that all runtime variable references in steps have corresponding variable definitions
+   */
+  private def validateRuntimeVariableReferences(flow: Floww, variables: List[VariableValue]): Unit = {
+    val definedVariables = flow.variables.map(_.name).toSet
+    val runTimeVariables = variables.map(_.name).toSet
+    if (runTimeVariables != definedVariables) {
+      logger.error(s"Not all runtime variables are passed. Missing variables ${definedVariables -- definedVariables}.")
+      throw ValidationException(s"Not all runtime variables are passed. Missing variables ${definedVariables -- definedVariables}.")
+    }
+
+    val emptyVariableValues = variables.filter(v => v.value == "" || v.value == null)
+    if (emptyVariableValues.nonEmpty) {
+      logger.error(s"Empty values found for variables: ${emptyVariableValues.map(_.name)}. A value must be passed")
+      throw ValidationException(s"Empty values found for variables: ${emptyVariableValues.map(_.name)}. A value must be passed")
+    }
+
+    val referencedVariables = FlowServiceAdapter.extractVariableReferencesFromSteps(flow.steps)
+    val undefinedVariables = referencedVariables -- runTimeVariables
+
+    if (undefinedVariables.nonEmpty) {
+      logger.error(s"Undefined runtime variable references: ${undefinedVariables.mkString(", ")}. All variables referenced as $referencedVariables must be defined in the flow variables.")
+      throw ValidationException(s"Undefined runtime variable references: ${undefinedVariables.mkString(", ")}. All variables referenced as $referencedVariables must be defined in the flow variables.")
+    }
   }
 
   override def addFlow(flow: Floww): Future[Floww] =
     MetricUtils.withAsyncServiceMetrics(serviceName, "addFlow") {
-      validateSteps(flow)
+      validateFlow(flow)
       for {
         _ <- validateResourceIds(flow.steps)
         now = System.currentTimeMillis() / 1000
@@ -131,6 +184,7 @@ class FlowServiceImpl @Inject()(
       flowRepository.findAll(search, flowIds, orgId, teamId, limit, page).map { case (flows, total) =>
         // Apply step type filtering if specified
         val filteredFlows = stepTypes match {
+          // add this filter in DB query, this is paginated so response won't come
           case Some(types) if types.nonEmpty =>
             flows.filter(flow => hasStepTypes(flow, types))
           case _ => flows
@@ -177,7 +231,7 @@ class FlowServiceImpl @Inject()(
 
   override def updateFlow(flow: Floww): Future[Boolean] =
     MetricUtils.withAsyncServiceMetrics(serviceName, "updateFlow") {
-      validateSteps(flow)
+      validateFlow(flow)
       for {
         _ <- validateResourceIds(flow.steps)
         existingFlowOpt <- flowRepository.findById(flow.id.getOrElse(""))
@@ -185,11 +239,12 @@ class FlowServiceImpl @Inject()(
           case Some(existingFlow) =>
             val now = System.currentTimeMillis() / 1000
 
-            // Check if only name/description changed (steps are the same)
+            // Check if only name/description changed (steps and variables are the same)
             val stepsChanged = existingFlow.steps != flow.steps
+            val variablesChanged = existingFlow.variables != flow.variables
 
-            if (stepsChanged) {
-              // Steps changed, create new version
+            if (stepsChanged || variablesChanged) {
+              // Steps or variables changed, create new version
               val nextVersion = existingFlow.version + 1
               val updatedFlow = flow.copy(modifiedAt = now, version = nextVersion)
               val flowVersion = FlowVersion(
@@ -208,7 +263,7 @@ class FlowServiceImpl @Inject()(
                 updateResult <- flowRepository.update(updatedFlow)
               } yield {
                 if (updateResult) {
-                  logger.info(s"Flow updated: ${flow.id.getOrElse("")} to version $nextVersion (steps changed)")
+                  logger.info(s"Flow updated: ${flow.id.getOrElse("")} to version $nextVersion (steps or variables changed)")
                 } else {
                   logger.warn(s"Flow update failed: ${flow.id.getOrElse("")}")
                 }
@@ -239,8 +294,9 @@ class FlowServiceImpl @Inject()(
 
     for {
       flow <- getFlow(runRequest.flowId).map(_.get) // TODO handle not found
+      _ = validateExecutionFlow(flow, runRequest.variables)
       execution <- {
-        val execution = createExecutionEntity(executionId, flow, runRequest)
+        val execution = FlowServiceAdapter.createExecutionEntity(executionId, flow, runRequest)
         executionRepository.saveExecution(execution).map(_ => execution)
       }
     } yield {
@@ -265,35 +321,8 @@ class FlowServiceImpl @Inject()(
     }
   }
 
-
-
-  private def createExecutionEntity(executionId: String, flow: Floww, runFlowRequest: RunFlowRequest) = {
-    val now = Instant.now()
-    val execSteps = flow.steps.map { step =>
-      ExecutionStep(
-        id = step.id,
-        name = step.name,
-        stepType = step.stepType,
-        meta = step.meta,
-        timeoutMs = step.timeoutMs,
-        runInBackground = step.runInBackground,
-        continueOnSuccess = step.continueOnSuccess,
-        status = IN_PROGRESS,
-        startedAt = now,
-        logs = List.empty,
-        response = None
-      )
-    }
-    Execution(
-      id = executionId,
-      flowId = flow.id.get,
-      flowVersion = flow.version,
-      status = ExecutionStatus.Todo,
-      startedAt = now,
-      steps = execSteps,
-      updatedAt = now,
-      parameters = Option(runFlowRequest.params),
-      testSuiteExecutionId = runFlowRequest.testSuiteExecutionId
-    )
+  private def validateExecutionFlow(flow: Floww, variables: List[VariableValue]): Unit = {
+    validateFlow(flow)
+    validateRuntimeVariableReferences(flow, variables)
   }
 }

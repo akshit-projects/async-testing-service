@@ -1,9 +1,17 @@
 package ab.async.tester.domain.enums
 
-import ab.async.tester.domain.enums.StepStatus.{ERROR, SUCCESS}
 import io.circe.{Decoder, Encoder}
 
-sealed trait StepType
+sealed trait StepType {
+  def stringified: String = this match {
+    case StepType.HttpRequest    => "http"
+    case StepType.KafkaPublish   => "kafka_publish"
+    case StepType.KafkaSubscribe => "kafka_subscribe"
+    case StepType.Delay          => "delay"
+    case StepType.SqlQuery       => "sql-db"
+    case StepType.RedisOperation => "cache"
+  }
+}
 object StepType {
   case object HttpRequest    extends StepType
   case object KafkaPublish   extends StepType

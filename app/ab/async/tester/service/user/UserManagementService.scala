@@ -1,9 +1,9 @@
 package ab.async.tester.service.user
 
-import ab.async.tester.domain.common.PaginatedResponse
-import ab.async.tester.domain.user.{UpdateUserRequest, User, UserRole}
+import ab.async.tester.domain.common.{PaginatedResponse, PaginationMetadata}
+import ab.async.tester.domain.user.{DetailedUserProfile, UpdateUserRequest, UserRole}
 import ab.async.tester.exceptions.ValidationException
-import ab.async.tester.library.repository.user.UserRepository
+import ab.async.tester.library.repository.user.{UserAuthRepository, UserProfileRepository}
 import ab.async.tester.library.utils.MetricUtils
 import com.google.inject.{ImplementedBy, Inject, Singleton}
 import play.api.Logger
@@ -12,51 +12,100 @@ import scala.concurrent.{ExecutionContext, Future}
 
 @ImplementedBy(classOf[UserManagementServiceImpl])
 trait UserManagementService {
-  def getAllUsers(search: Option[String], limit: Int, page: Int): Future[PaginatedResponse[User]]
-  def getUserById(userId: String): Future[Option[User]]
-  def updateUser(userId: String, updateRequest: UpdateUserRequest): Future[User]
+  def getAllUsers(search: Option[String], limit: Int, page: Int): Future[PaginatedResponse[DetailedUserProfile]]
+  def getUserById(userId: String): Future[Option[DetailedUserProfile]]
+  def updateUser(userId: String, updateRequest: UpdateUserRequest): Future[DetailedUserProfile]
 }
 
 @Singleton
 class UserManagementServiceImpl @Inject()(
-  userRepository: UserRepository
+  userAuthRepository: UserAuthRepository,
+  userProfileRepository: UserProfileRepository
 )(implicit ec: ExecutionContext) extends UserManagementService {
 
   implicit private val logger: Logger = Logger(this.getClass)
   private val serviceName = "UserManagementService"
 
-  override def getAllUsers(search: Option[String], limit: Int, page: Int): Future[PaginatedResponse[User]] = {
+  override def getAllUsers(search: Option[String], limit: Int, page: Int): Future[PaginatedResponse[DetailedUserProfile]] = {
     MetricUtils.withAsyncServiceMetrics(serviceName, "getAllUsers") {
-      userRepository.findAll(search, limit, page).map { case (users, total) =>
-        PaginatedResponse(
-          data = users,
-          pagination = ab.async.tester.domain.common.PaginationMetadata(
-            page = page,
-            limit = limit,
-            total = total
+      userProfileRepository.findAll(search, limit, page).flatMap { case (profiles, total) =>
+        // Get auth data for all users to include email and last login
+        val authFutures = profiles.map { profile =>
+          userAuthRepository.findById(profile.id).map { authOpt =>
+            authOpt.map { auth =>
+              DetailedUserProfile(
+                id = profile.id,
+                email = auth.email,
+                name = profile.name,
+                profilePicture = profile.profilePicture,
+                company = profile.company,
+                role = profile.role.name,
+                isAdmin = profile.isAdmin,
+                isActive = profile.isActive,
+                orgIds = profile.orgIds,
+                teamIds = profile.teamIds,
+                lastLoginAt = auth.lastLoginAt,
+                createdAt = profile.createdAt,
+                updatedAt = profile.updatedAt
+              )
+            }
+          }
+        }
+
+        Future.sequence(authFutures).map { detailedProfiles =>
+          PaginatedResponse(
+            data = detailedProfiles.flatten,
+            pagination = PaginationMetadata(
+              page = page,
+              limit = limit,
+              total = total
+            )
           )
-        )
+        }
       }.recover {
         case e: Exception =>
           logger.error(s"Error retrieving users: ${e.getMessage}", e)
           PaginatedResponse(
-            data = List.empty,
-            pagination = ab.async.tester.domain.common.PaginationMetadata(page, limit, 0)
+            data = List[DetailedUserProfile](),
+            pagination = PaginationMetadata(page, limit, 0)
           )
       }
     }
   }
 
-  override def getUserById(userId: String): Future[Option[User]] = {
+  override def getUserById(userId: String): Future[Option[DetailedUserProfile]] = {
     MetricUtils.withAsyncServiceMetrics(serviceName, "getUserById") {
-      userRepository.getUserById(userId)
+      val auth = userAuthRepository.findById(userId)
+      val profile = userProfileRepository.findById(userId)
+      (for {
+        authOpt <- auth
+        profileOpt <- profile
+      } yield (authOpt, profileOpt)).map {
+        case (Some(auth), Some(profile)) =>
+          Some(DetailedUserProfile(
+            id = profile.id,
+            email = auth.email,
+            name = profile.name,
+            profilePicture = profile.profilePicture,
+            company = profile.company,
+            role = profile.role.name,
+            isAdmin = profile.isAdmin,
+            isActive = profile.isActive,
+            orgIds = profile.orgIds,
+            teamIds = profile.teamIds,
+            lastLoginAt = auth.lastLoginAt,
+            createdAt = profile.createdAt,
+            updatedAt = profile.updatedAt
+          ))
+        case _ => None
+      }
     }
   }
 
-  override def updateUser(userId: String, updateRequest: UpdateUserRequest): Future[User] = {
+  override def updateUser(userId: String, updateRequest: UpdateUserRequest): Future[DetailedUserProfile] = {
     MetricUtils.withAsyncServiceMetrics(serviceName, "updateUser") {
-      userRepository.getUserById(userId).flatMap {
-        case Some(user) =>
+      userProfileRepository.findById(userId).flatMap {
+        case Some(_) =>
           // Validate and parse role if provided
           val roleOpt = updateRequest.role.map { roleStr =>
             try {
@@ -68,8 +117,8 @@ class UserManagementServiceImpl @Inject()(
           }
 
           // Update user metadata
-          userRepository.updateUserMetadata(
-            userId = userId,
+          userProfileRepository.updateMetadata(
+            id = userId,
             orgIds = updateRequest.orgIds,
             teamIds = updateRequest.teamIds,
             role = roleOpt,
@@ -78,7 +127,7 @@ class UserManagementServiceImpl @Inject()(
           ).flatMap { success =>
             if (success) {
               // Get updated user
-              userRepository.getUserById(userId).map {
+              getUserById(userId).map {
                 case Some(updatedUser) =>
                   logger.info(s"User $userId updated successfully")
                   updatedUser
@@ -91,7 +140,7 @@ class UserManagementServiceImpl @Inject()(
           }
 
         case None =>
-          throw ValidationException(s"User not found: $userId")
+          Future.failed(ValidationException(s"User not found: $userId"))
       }
     }
   }

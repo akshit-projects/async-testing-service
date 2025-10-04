@@ -17,7 +17,7 @@ trait FlowService {
   def createExecution(runRequest: RunFlowRequest): Future[Execution]
 
   /** Validates the steps of a flow, throws ValidationException if invalid */
-  def validateSteps(flow: Floww): Unit
+  def validateFlow(flow: Floww): Unit
 
   /** Gets flows based on filter criteria with pagination */
   def getFlows(search: Option[String], flowIds: Option[List[String]], orgId: Option[String], teamId: Option[String], stepTypes: Option[List[String]], limit: Int, page: Int): Future[PaginatedResponse[Floww]]

@@ -112,10 +112,6 @@ object RuntimeVariableSubstitution {
       case VariableDataType.DOUBLE   => variable.value.asInstanceOf[Double].toString
       case VariableDataType.BOOLEAN  => variable.value.asInstanceOf[Boolean].toString
       case VariableDataType.DATE     => variable.value.toString // or format as yyyy-MM-dd
-      case VariableDataType.DATETIME => variable.value.toString // or ISO date-time
-      case VariableDataType.EMAIL    => variable.value.toString
-      case VariableDataType.URL      => variable.value.toString
-      case VariableDataType.UUID     => variable.value.toString
     }
   }
 

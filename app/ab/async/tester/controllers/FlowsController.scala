@@ -104,7 +104,7 @@ class FlowsController @Inject()(
       JsonParsers.parseJsonBody[Floww](request)(implicitly, ec) match {
         case Left(result) => Future.successful(result)
         case Right(flow) =>
-          flowService.validateSteps(flow)
+          flowService.validateFlow(flow)
           Future.successful(Ok(Map("status" -> "valid").asJsonNoSpaces))
       }
     }

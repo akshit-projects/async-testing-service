@@ -1,21 +1,27 @@
 package ab.async.tester.service.auth
 
-import ab.async.tester.domain.auth.GoogleClaims
-import ab.async.tester.domain.requests.auth.{LoginRequest, UpdateProfileRequest, AdminUpdateUserRequest}
-import ab.async.tester.domain.user.{User, UserRole}
+import ab.async.tester.domain.auth._
+import ab.async.tester.domain.requests.auth.LoginRequest
+import ab.async.tester.domain.response.auth.AuthResponse
 import com.google.inject.ImplementedBy
 
 import scala.concurrent.Future
 
 @ImplementedBy(classOf[AuthServiceImpl])
 trait AuthService {
+  // Google OAuth login
+  def loginWithGoogle(loginRequest: LoginRequest): Future[AuthResponse]
 
-  def loginUser(loginRequest: LoginRequest): Future[User]
+  // Email/password authentication
+  def loginWithEmail(email: String, password: String): Future[AuthResponse]
 
-  def updateUserProfile(userId: String, updateRequest: UpdateProfileRequest): Future[User]
+  // User registration
+  def register(email: String, password: String, name: Option[String]): Future[AuthResponse]
 
-  def getUserProfile(userId: String): Future[Option[User]]
+  // Password reset
+  def forgotPassword(email: String): Future[Boolean]
+  def resetPassword(token: String, newPassword: String): Future[Boolean]
 
-  def adminUpdateUser(adminRequest: AdminUpdateUserRequest): Future[Boolean]
-
+  // Token refresh
+  def refreshToken(refreshToken: String): Future[AuthResponse]
 }

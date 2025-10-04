@@ -35,7 +35,6 @@ libraryDependencies ++= Seq(
   "com.fasterxml.jackson.core" % "jackson-databind" % jacksonVersion,
   "com.fasterxml.jackson.core" % "jackson-annotations" % jacksonVersion,
   "com.fasterxml.jackson.module" %% "jackson-module-scala" % jacksonVersion,
-  "com.github.jwt-scala" %% "jwt-play-json" % "11.0.2",
 
 
 // Testing dependencies
@@ -45,10 +44,12 @@ libraryDependencies ++= Seq(
 // If you use Flyway for DB migrations
 libraryDependencies += "org.flywaydb" % "flyway-core" % "11.11.0"
 
+
 lazy val circeDeps = Seq(
   "io.circe" %% "circe-core" % circeVersion,
   "io.circe" %% "circe-generic" % circeVersion,
   "io.circe" %% "circe-parser" % circeVersion,
+  "com.github.jwt-scala" %% "jwt-circe" % "11.0.3"
 )
 
 lazy val domainDeps = circeDeps ++ Seq(
@@ -78,6 +79,9 @@ lazy val libDeps = Seq(
   "io.prometheus" % "simpleclient_httpserver" % "0.16.0",
   "org.apache.kafka" % "kafka-clients" % "4.0.0",
   "redis.clients" % "jedis" % "4.3.1",
+  "com.github.jwt-scala" %% "jwt-play-json" % "11.0.2",
+  "com.sun.mail" % "jakarta.mail" % "2.0.1",
+  "org.mindrot" % "jbcrypt" % "0.4",
   guice,
   ws
 ) ++ circeDeps

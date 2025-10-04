@@ -1,7 +1,7 @@
 package ab.async.tester.controllers.auth
 
 import ab.async.tester.domain.response.GenericError
-import ab.async.tester.domain.user.{User, UserRole}
+import ab.async.tester.domain.user.{AuthenticatedUser, UserRole}
 import com.google.inject.{Inject, Singleton}
 import io.circe.generic.auto._
 import io.circe.syntax._
@@ -58,7 +58,7 @@ class AuthorizedAction @Inject()(
   /**
    * Check if user has specific permission
    */
-  private def hasPermission(user: User, permission: String): Boolean = {
+  private def hasPermission(user: AuthenticatedUser, permission: String): Boolean = {
     user.role.permissions.contains(permission) || user.isAdmin
   }
 }

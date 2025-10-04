@@ -50,15 +50,19 @@ DELETE  /api/v1/resources/:id      ab.async.tester.controllers.ResourceControlle
 # Metrics endpoint
 GET     /metrics                   ab.async.tester.controllers.MetricsController.metrics
 
-# Auth endpoints
-POST     /api/v1/login                   ab.async.tester.controllers.AuthController.loginUser
-GET      /api/v1/profile                 ab.async.tester.controllers.AuthController.getUserProfile
-PUT      /api/v1/profile                 ab.async.tester.controllers.AuthController.updateUserProfile()
+# Authentication endpoints
+POST     /api/v1/auth/google             ab.async.tester.controllers.AuthController.googleLogin
+POST     /api/v1/auth/login              ab.async.tester.controllers.AuthController.loginWithEmail()
+POST     /api/v1/auth/register           ab.async.tester.controllers.AuthController.register()
+POST     /api/v1/auth/forgot-password    ab.async.tester.controllers.AuthController.forgotPassword()
+POST     /api/v1/auth/reset-password     ab.async.tester.controllers.AuthController.resetPassword()
+POST     /api/v1/auth/refresh            ab.async.tester.controllers.AuthController.refreshAccessToken()
 
-# Admin endpoints
-PUT      /api/v1/admin/users             ab.async.tester.controllers.AuthController.adminUpdateUser
+# User Profile endpoints (Authenticated users)
+GET      /api/v1/profile                 ab.async.tester.controllers.UserProfileController.getUserProfile
+PUT      /api/v1/profile                 ab.async.tester.controllers.UserProfileController.updateUserProfile()
 
-# User Management endpoints
+# User Management endpoints (Admin only)
 GET      /api/v1/users                   ab.async.tester.controllers.UserManagementController.getAllUsers(search: Option[String] ?= None, limit: Int ?= 50, page: Int ?= 0)
 GET      /api/v1/users/:id               ab.async.tester.controllers.UserManagementController.getUserById(id: String)
 PUT      /api/v1/users/:id               ab.async.tester.controllers.UserManagementController.updateUser(id: String)

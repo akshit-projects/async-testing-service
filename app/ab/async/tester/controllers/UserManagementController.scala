@@ -7,6 +7,7 @@ import ab.async.tester.library.utils.JsonParsers
 import ab.async.tester.service.user.UserManagementService
 import com.google.inject.{Inject, Singleton}
 import io.circe.syntax._
+import io.circe.generic.auto._
 import play.api.Logger
 import play.api.mvc._
 
@@ -21,10 +22,6 @@ class UserManagementController @Inject()(
 
   private val logger = Logger(this.getClass)
 
-  /**
-   * Get all users with pagination and search
-   * GET /api/v1/users?search=john&limit=20&page=0
-   */
   def getAllUsers(search: Option[String], limit: Int, page: Int): Action[AnyContent] = 
     authorizedAction.requirePermission(Permissions.USERS_READ).async { implicit request =>
       logger.info(s"Getting all users - search: $search, limit: $limit, page: $page")
@@ -38,10 +35,6 @@ class UserManagementController @Inject()(
       }
     }
 
-  /**
-   * Get user by ID
-   * GET /api/v1/users/:id
-   */
   def getUserById(id: String): Action[AnyContent] = 
     authorizedAction.requirePermission(Permissions.USERS_READ).async { implicit request =>
       logger.info(s"Getting user by ID: $id")
@@ -58,10 +51,6 @@ class UserManagementController @Inject()(
       }
     }
 
-  /**
-   * Update user metadata (org, team, role, etc.)
-   * PUT /api/v1/users/:id
-   */
   def updateUser(id: String): Action[AnyContent] = 
     authorizedAction.requirePermission(Permissions.USERS_UPDATE).async { implicit request =>
       logger.info(s"Updating user: $id")

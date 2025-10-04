@@ -1,8 +1,8 @@
 package ab.async.tester.controllers.auth
 
 import ab.async.tester.domain.response.GenericError
-import ab.async.tester.domain.user.User
-import ab.async.tester.library.repository.user.UserRepository
+import ab.async.tester.domain.user.AuthenticatedUser
+import ab.async.tester.library.repository.user.{UserAuthRepository, UserProfileRepository}
 import ab.async.tester.library.utils.MetricUtils
 import com.google.inject.{Inject, Singleton}
 import io.circe.generic.auto._
@@ -18,7 +18,7 @@ import scala.util.{Failure, Success, Try}
 /**
  * Request wrapper that includes authenticated user information
  */
-case class AuthenticatedRequest[A](user: User, request: Request[A]) extends WrappedRequest[A](request)
+case class AuthenticatedRequest[A](user: AuthenticatedUser, request: Request[A]) extends WrappedRequest[A](request)
 
 /**
  * Authentication action that verifies JWT tokens and extracts user information
@@ -26,11 +26,12 @@ case class AuthenticatedRequest[A](user: User, request: Request[A]) extends Wrap
 @Singleton
 class AuthenticatedAction @Inject()(
   parser: BodyParsers.Default,
-  userRepository: UserRepository,
+  userAuthRepository: UserAuthRepository,
+  userProfileRepository: UserProfileRepository,
   config: Configuration
 )(implicit ec: ExecutionContext) extends ActionBuilder[AuthenticatedRequest, AnyContent] {
 
-  private val jwtSecret = config.get[String]("jwt.secret")
+  private val jwtSecret = config.get[String]("auth.jwt.secret")
   private val logger = Logger(this.getClass)
 
   override def executionContext: ExecutionContext = ec
@@ -39,12 +40,25 @@ class AuthenticatedAction @Inject()(
   override def invokeBlock[A](request: Request[A], block: AuthenticatedRequest[A] => Future[Result]): Future[Result] = {
     extractUserFromToken(request) match {
       case Some(tokenUser) =>
+        val userAuth = userAuthRepository.findById(tokenUser.userId)
+        val profileAuth = userProfileRepository.findById(tokenUser.userId)
         // Always verify against database for fresh user data and security
-        userRepository.getUserById(tokenUser.id).flatMap {
-          case Some(currentUser) =>
-            // Use current user data from DB, not stale token data
-            block(AuthenticatedRequest(currentUser, request))
-          case None =>
+        val userDataFuture = for {
+          authOpt <- userAuth
+          profileOpt <- profileAuth
+        } yield (authOpt, profileOpt)
+
+        userDataFuture.flatMap {
+          case (Some(auth), Some(profile)) =>
+            // Check if user is active
+            if (!profile.isActive) {
+              Future.successful(Results.Unauthorized(GenericError("User account is inactive").asJson.noSpaces))
+            } else {
+              // Use current user data from DB, not stale token data
+              val currentUser = AuthenticatedUser.fromAuthAndProfile(auth, profile)
+              block(AuthenticatedRequest(currentUser, request))
+            }
+          case _ =>
             // User no longer exists in database
             Future.successful(Results.Unauthorized(GenericError("User account not found").asJson.noSpaces))
         }.recover {
@@ -57,7 +71,7 @@ class AuthenticatedAction @Inject()(
     }
   }
 
-  private def extractUserFromToken[A](request: Request[A]): Option[User] = {
+  private def extractUserFromToken[A](request: Request[A]): Option[AuthenticatedUser] = {
     MetricUtils.withAuthMetrics {
       for {
         authHeader <- request.headers.get("Authorization")
@@ -75,13 +89,13 @@ class AuthenticatedAction @Inject()(
     }
   }
 
-  private def validateTokenAndExtractUser(token: String): Option[User] = {
+  private def validateTokenAndExtractUser(token: String): Option[AuthenticatedUser] = {
     Try {
       Jwt.decode(token, jwtSecret, Seq(JwtAlgorithm.HS256)).toOption
     } match {
       case Success(claim) =>
         if (claim.isEmpty) return None
-        decode[User](claim.get.content) match {
+        decode[AuthenticatedUser](claim.get.content) match {
           case Right(user) => Some(user)
           case Left(_) => None
         }
