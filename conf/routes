@@ -1,3 +1,9 @@
+# OpenAPI/Swagger Documentation
+GET     /api/v1/docs                    ab.async.tester.controllers.OpenAPIController.swaggerUI
+GET     /api/v1/openapi.json            ab.async.tester.controllers.OpenAPIController.getOpenAPISpec
+
+# Flow endpoints
+
 GET     /api/v1/flows                           ab.async.tester.controllers.FlowsController.getFlows(orgId: Option[String])
 POST    /api/v1/flows                          ab.async.tester.controllers.FlowsController.addFlow()
 PUT     /api/v1/flows                          ab.async.tester.controllers.FlowsController.updateFlow()
@@ -59,8 +65,8 @@ POST     /api/v1/auth/reset-password     ab.async.tester.controllers.AuthControl
 POST     /api/v1/auth/refresh            ab.async.tester.controllers.AuthController.refreshAccessToken()
 
 # User Profile endpoints (Authenticated users)
-GET      /api/v1/profile                 ab.async.tester.controllers.UserProfileController.getUserProfile
-PUT      /api/v1/profile                 ab.async.tester.controllers.UserProfileController.updateUserProfile()
+GET      /api/v1/profile                 ab.async.tester.controllers.UserManagementController.getCurrentUserProfile
+PUT      /api/v1/profile                 ab.async.tester.controllers.UserManagementController.updateCurrentUserProfile()
 
 # User Management endpoints (Admin only)
 GET      /api/v1/users                   ab.async.tester.controllers.UserManagementController.getAllUsers(search: Option[String] ?= None, limit: Int ?= 50, page: Int ?= 0)

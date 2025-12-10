@@ -61,6 +61,7 @@ class UserProfileTable(tag: Tag) extends Table[UserProfile](tag, "user_profiles"
 trait UserProfileRepository {
   def findById(id: String): Future[Option[UserProfile]]
   def findAll(search: Option[String], limit: Int, page: Int): Future[(List[UserProfile], Int)]
+  def findAllWithAuth(search: Option[String], limit: Int, page: Int): Future[(List[(UserProfile, String, Option[Long])], Int)]
   def insert(profile: UserProfile): Future[UserProfile]
   def update(profile: UserProfile): Future[Boolean]
   def updateMetadata(id: String, orgIds: Option[List[String]], teamIds: Option[List[String]], role: Option[UserRole], isAdmin: Option[Boolean], isActive: Option[Boolean]): Future[Boolean]
@@ -71,6 +72,7 @@ class UserProfileRepositoryImpl @Inject()(db: Database)(implicit ec: ExecutionCo
 
   private val repositoryName = "UserProfileRepository"
   private val userProfiles = TableQuery[UserProfileTable]
+  private val userAuth = TableQuery[UserAuthTable]
   implicit private val logger: Logger = Logger(this.getClass)
 
   override def findById(id: String): Future[Option[UserProfile]] = {
@@ -82,7 +84,7 @@ class UserProfileRepositoryImpl @Inject()(db: Database)(implicit ec: ExecutionCo
   override def findAll(search: Option[String], limit: Int, page: Int): Future[(List[UserProfile], Int)] = {
     MetricUtils.withAsyncRepositoryMetrics(repositoryName, "findAll") {
       val offset = page * limit
-      
+
       // Build base query
       val baseQuery = search match {
         case Some(searchTerm) =>
@@ -91,23 +93,59 @@ class UserProfileRepositoryImpl @Inject()(db: Database)(implicit ec: ExecutionCo
         case None =>
           userProfiles
       }
-      
+
       // Count query
       val countQuery = baseQuery.length.result
-      
+
       // Data query with pagination
       val dataQuery = baseQuery
         .sortBy(_.createdAt.desc)
         .drop(offset)
         .take(limit)
         .result
-      
+
       // Execute both queries in parallel
       val combinedQuery = for {
         total <- countQuery
         data <- dataQuery
       } yield (data.toList, total)
-      
+
+      db.run(combinedQuery)
+    }
+  }
+
+  override def findAllWithAuth(search: Option[String], limit: Int, page: Int): Future[(List[(UserProfile, String, Option[Long])], Int)] = {
+    MetricUtils.withAsyncRepositoryMetrics(repositoryName, "findAllWithAuth") {
+      val offset = page * limit
+
+      // Build base query with JOIN
+      val baseQuery = search match {
+        case Some(searchTerm) =>
+          val pattern = s"%$searchTerm%"
+          userProfiles
+            .join(userAuth).on(_.id === _.id)
+            .filter { case (profile, _) => profile.name.like(pattern) }
+        case None =>
+          userProfiles.join(userAuth).on(_.id === _.id)
+      }
+
+      // Count query
+      val countQuery = baseQuery.length.result
+
+      // Data query with pagination - select only needed fields from userAuth
+      val dataQuery = baseQuery
+        .sortBy { case (profile, _) => profile.createdAt.desc }
+        .drop(offset)
+        .take(limit)
+        .map { case (profile, auth) => (profile, auth.email, auth.lastLoginAt) }
+        .result
+
+      // Execute both queries
+      val combinedQuery = for {
+        total <- countQuery
+        data <- dataQuery
+      } yield (data.toList, total)
+
       db.run(combinedQuery)
     }
   }

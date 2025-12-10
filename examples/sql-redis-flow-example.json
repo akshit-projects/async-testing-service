@@ -1,0 +1,147 @@
+{
+  "name": "User Data Processing Flow",
+  "description": "Demonstrates SQL queries and Redis operations with variable substitution",
+  "creator": "system@example.com",
+  "orgId": "org-sample-1",
+  "teamId": "team-sample-1",
+  "steps": [
+    {
+      "name": "getUserFromDatabase",
+      "stepType": "sql",
+      "meta": {
+        "resourceId": "resource-db-1",
+        "query": "SELECT id, name, email, status FROM users WHERE email = ${email}",
+        "parameters": {
+          "email": "john.doe@example.com"
+        },
+        "expectedRowCount": 1,
+        "expectedColumns": ["id", "name", "email", "status"]
+      },
+      "timeoutMs": 5000,
+      "runInBackground": false,
+      "continueOnSuccess": true
+    },
+    {
+      "name": "cacheUserData",
+      "stepType": "redis",
+      "meta": {
+        "resourceId": "resource-redis-1",
+        "operation": "SET",
+        "key": "user:${getUserFromDatabase.rows.first.id}",
+        "value": "{\"name\": \"${getUserFromDatabase.rows.first.name}\", \"email\": \"${getUserFromDatabase.rows.first.email}\", \"status\": \"${getUserFromDatabase.rows.first.status}\"}",
+        "ttl": 3600
+      },
+      "timeoutMs": 3000,
+      "runInBackground": false,
+      "continueOnSuccess": true
+    },
+    {
+      "name": "getUserFromCache",
+      "stepType": "redis",
+      "meta": {
+        "resourceId": "resource-redis-1",
+        "operation": "GET",
+        "key": "user:${getUserFromDatabase.rows.first.id}",
+        "expectedExists": true
+      },
+      "timeoutMs": 3000,
+      "runInBackground": false,
+      "continueOnSuccess": true
+    },
+    {
+      "name": "updateUserStatus",
+      "stepType": "redis",
+      "meta": {
+        "resourceId": "resource-redis-1",
+        "operation": "HSET",
+        "key": "user:${getUserFromDatabase.rows.first.id}:status",
+        "field": "last_accessed",
+        "value": "2024-01-15T10:30:00Z"
+      },
+      "timeoutMs": 3000,
+      "runInBackground": false,
+      "continueOnSuccess": true
+    },
+    {
+      "name": "getActiveUsers",
+      "stepType": "sql",
+      "meta": {
+        "resourceId": "resource-db-1",
+        "query": "SELECT COUNT(*) as active_count FROM users WHERE status = 'active' AND last_login > NOW() - INTERVAL '30 days'",
+        "expectedColumns": ["active_count"]
+      },
+      "timeoutMs": 5000,
+      "runInBackground": false,
+      "continueOnSuccess": true
+    },
+    {
+      "name": "cacheActiveUserCount",
+      "stepType": "redis",
+      "meta": {
+        "resourceId": "resource-redis-1",
+        "operation": "SET",
+        "key": "stats:active_users",
+        "value": "${getActiveUsers.rows.first.active_count}",
+        "ttl": 300
+      },
+      "timeoutMs": 3000,
+      "runInBackground": false,
+      "continueOnSuccess": true
+    },
+    {
+      "name": "publishUserEvent",
+      "stepType": "kafka_publish",
+      "meta": {
+        "resourceId": "resource-kafka-1",
+        "topicName": "user-events",
+        "messages": [
+          {
+            "key": "${getUserFromDatabase.rows.first.id}",
+            "value": "{\"event\": \"user_accessed\", \"userId\": \"${getUserFromDatabase.rows.first.id}\", \"timestamp\": \"2024-01-15T10:30:00Z\", \"activeUserCount\": ${getActiveUsers.rows.first.active_count}}"
+          }
+        ]
+      },
+      "timeoutMs": 3000,
+      "runInBackground": false,
+      "continueOnSuccess": true
+    },
+    {
+      "name": "verifyUserInCache",
+      "stepType": "redis",
+      "meta": {
+        "resourceId": "resource-redis-1",
+        "operation": "EXISTS",
+        "key": "user:${getUserFromDatabase.rows.first.id}",
+        "expectedExists": true
+      },
+      "timeoutMs": 3000,
+      "runInBackground": false,
+      "continueOnSuccess": true
+    },
+    {
+      "name": "getUserSessionData",
+      "stepType": "redis",
+      "meta": {
+        "resourceId": "resource-redis-1",
+        "operation": "HGETALL",
+        "key": "user:${getUserFromDatabase.rows.first.id}:session"
+      },
+      "timeoutMs": 3000,
+      "runInBackground": false,
+      "continueOnSuccess": true
+    },
+    {
+      "name": "cleanupOldSessions",
+      "stepType": "sql",
+      "meta": {
+        "resourceId": "resource-db-1",
+        "query": "SELECT session_id FROM user_sessions WHERE user_id = ${getUserFromDatabase.rows.first.id} AND created_at < NOW() - INTERVAL '7 days'",
+        "parameters": {},
+        "expectedColumns": ["session_id"]
+      },
+      "timeoutMs": 5000,
+      "runInBackground": false,
+      "continueOnSuccess": true
+    }
+  ]
+}

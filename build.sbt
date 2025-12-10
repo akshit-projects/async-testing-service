@@ -39,6 +39,12 @@ libraryDependencies ++= Seq(
 
 // Testing dependencies
   "org.scalatestplus.play" %% "scalatestplus-play" % "7.0.1" % Test,
+
+  // OpenAPI/Swagger dependencies
+  "io.swagger.core.v3" % "swagger-core" % "2.2.20",
+  "io.swagger.core.v3" % "swagger-annotations" % "2.2.20",
+  "io.swagger.core.v3" % "swagger-models" % "2.2.20",
+  "com.github.dwickern" %% "swagger-play2.8" % "4.0.0",
 )
 
 // If you use Flyway for DB migrations
