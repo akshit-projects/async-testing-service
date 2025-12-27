@@ -36,20 +36,20 @@ libraryDependencies ++= Seq(
   "com.fasterxml.jackson.core" % "jackson-annotations" % jacksonVersion,
   "com.fasterxml.jackson.module" %% "jackson-module-scala" % jacksonVersion,
 
-
 // Testing dependencies
   "org.scalatestplus.play" %% "scalatestplus-play" % "7.0.1" % Test,
+  "org.mockito" %% "mockito-scala" % "1.17.30" % Test,
 
   // OpenAPI/Swagger dependencies
   "io.swagger.core.v3" % "swagger-core" % "2.2.20",
   "io.swagger.core.v3" % "swagger-annotations" % "2.2.20",
   "io.swagger.core.v3" % "swagger-models" % "2.2.20",
-  "com.github.dwickern" %% "swagger-play2.8" % "4.0.0",
+  "com.github.dwickern" %% "swagger-play2.8" % "4.0.0"
 )
 
 // If you use Flyway for DB migrations
 libraryDependencies += "org.flywaydb" % "flyway-core" % "11.11.0"
-
+libraryDependencies += "org.flywaydb" % "flyway-database-postgresql" % "11.11.0"
 
 lazy val circeDeps = Seq(
   "io.circe" %% "circe-core" % circeVersion,
@@ -62,7 +62,6 @@ lazy val domainDeps = circeDeps ++ Seq(
   "org.scalatest" %% "scalatest" % "3.2.15" % Test
 )
 
-
 lazy val akkaVersion = "2.6.20"
 
 lazy val workerDeps = Seq(
@@ -73,7 +72,10 @@ lazy val workerDeps = Seq(
   "com.typesafe.play" %% "play-ahc-ws-standalone" % "2.2.11", // WSClient for HTTP requests
   "com.typesafe.play" %% "play-ws-standalone-json" % "2.2.11", // JSON support for WS
   guice
-) ++ circeDeps
+) ++ circeDeps ++ Seq(
+  "org.scalatestplus.play" %% "scalatestplus-play" % "7.0.1" % Test,
+  "org.mockito" %% "mockito-scala" % "1.17.30" % Test
+)
 
 lazy val libDeps = Seq(
   "org.postgresql" % "postgresql" % "42.7.7",
@@ -90,7 +92,10 @@ lazy val libDeps = Seq(
   "org.mindrot" % "jbcrypt" % "0.4",
   guice,
   ws
-) ++ circeDeps
+) ++ circeDeps ++ Seq(
+  "org.scalatestplus.play" %% "scalatestplus-play" % "7.0.1" % Test,
+  "org.mockito" %% "mockito-scala" % "1.17.30" % Test
+)
 
 lazy val domain = (project in file("domain"))
   .settings(
@@ -106,8 +111,8 @@ lazy val library = (project in file("library"))
       "com.typesafe.slick" %% "slick" % slickVersion,
       "com.typesafe.slick" %% "slick-hikaricp" % slickVersion
     )
-  ).dependsOn(domain)
-
+  )
+  .dependsOn(domain)
 
 lazy val workers = (project in file("workers"))
   .settings(
@@ -121,8 +126,8 @@ lazy val workers = (project in file("workers"))
       "com.typesafe.slick" %% "slick" % slickVersion,
       "com.typesafe.slick" %% "slick-hikaricp" % slickVersion
     )
-  ).dependsOn(library)
-
+  )
+  .dependsOn(library)
 
 lazy val root = (project in file("."))
   .settings(
@@ -136,4 +141,6 @@ lazy val root = (project in file("."))
       "com.typesafe.slick" %% "slick" % slickVersion,
       "com.typesafe.slick" %% "slick-hikaricp" % slickVersion
     )
-  ).dependsOn(library).enablePlugins(PlayScala)
+  )
+  .dependsOn(library)
+  .enablePlugins(PlayScala)

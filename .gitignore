@@ -12,6 +12,7 @@ worker**log
 *.iws
 *.iml
 *.ipr
+.metals/**
 out/
 !**/src/main/**/out/
 !**/src/test/**/out/
