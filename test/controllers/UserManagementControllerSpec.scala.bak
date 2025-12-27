@@ -1,0 +1,116 @@
+package ab.async.tester.controllers
+
+import controllers.BaseControllerSpec
+import ab.async.tester.service.user.{UserManagementService, UserProfileService}
+import ab.async.tester.controllers.auth.{
+  AuthorizedAction,
+  AuthenticatedAction,
+  AuthenticatedRequest
+}
+import ab.async.tester.domain.user.{
+  AuthenticatedUser,
+  UserRole,
+  DetailedUserProfile,
+  UpdateUserRequest,
+  PublicUserProfile
+}
+import ab.async.tester.domain.requests.auth.UpdateProfileRequest
+import ab.async.tester.domain.common.PaginatedResponse
+import ab.async.tester.library.repository.user.{
+  UserAuthRepository,
+  UserProfileRepository
+}
+import play.api.test.Helpers._
+import play.api.test.{FakeRequest, Helpers}
+import play.api.libs.json.Json
+import play.api.mvc._
+import play.api.Configuration
+import scala.concurrent.{Future, ExecutionContext}
+import org.mockito.ArgumentMatchers.any
+import io.circe.generic.auto._
+import io.circe.syntax._
+
+import utils.{StubAuthorizedAction, StubAuthenticatedAction}
+
+class UserManagementControllerSpec extends BaseControllerSpec {
+
+  val mockUserManagementService = mock[UserManagementService]
+  val mockUserProfileService = mock[UserProfileService]
+  // mockAuthenticatedAction was removed from usage if I use stubs directly.
+  // Actually StubAuthorizedAction constructor (in utils) creates its own mock if not provided.
+
+  val testUser = AuthenticatedUser(
+    "user1",
+    "user@example.com",
+    Some("User"),
+    UserRole.User,
+    false
+  )
+
+  val stubAuthorizedAction = new StubAuthorizedAction(testUser)
+  val stubAuthenticatedAction = new StubAuthenticatedAction(testUser)
+
+  val cc = Helpers.stubControllerComponents()
+  val controller = new UserManagementController(
+    cc,
+    stubAuthenticatedAction,
+    stubAuthorizedAction,
+    mockUserManagementService,
+    mockUserProfileService
+  )
+
+  "UserManagementController" should {
+    "getCurrentUserProfile should return profile" in {
+      val profile = PublicUserProfile(
+        "user1",
+        Some("User"),
+        None,
+        None,
+        "user",
+        false,
+        None,
+        None,
+        0L,
+        0L
+      )
+      when(mockUserProfileService.getUserProfile("user1"))
+        .thenReturn(Future.successful(Some(profile)))
+
+      val request = FakeRequest(GET, "/api/v1/profile")
+      val result = controller.getCurrentUserProfile().apply(request)
+
+      status(result) mustBe OK
+      contentAsJson(result) mustBe Json.parse(profile.asJson.noSpaces)
+    }
+
+    "getAllUsers should return users" in {
+      val users = List(
+        DetailedUserProfile(
+          "user1",
+          "email",
+          Some("name"),
+          None,
+          None,
+          "user",
+          false,
+          true,
+          None,
+          None,
+          None,
+          0L,
+          0L
+        )
+      )
+      val response = PaginatedResponse(users, 1, 10, 0)
+
+      when(mockUserManagementService.getAllUsers(any, any[Int], any[Int]))
+        .thenReturn(Future.successful(response))
+
+      val request = FakeRequest(GET, "/api/v1/users")
+      val result = controller.getAllUsers(None, 10, 0).apply(request)
+
+      status(result) mustBe OK
+      contentAsJson(result) mustBe Json.parse(response.asJson.noSpaces)
+    }
+  }
+}

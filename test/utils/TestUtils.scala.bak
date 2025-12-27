@@ -1,0 +1,58 @@
+package utils
+
+import ab.async.tester.controllers.auth.{
+  AuthenticatedAction,
+  AuthorizedAction,
+  AuthenticatedRequest
+}
+import ab.async.tester.domain.user.AuthenticatedUser
+import play.api.mvc._
+import play.api.test.Helpers
+import play.api.Configuration
+import scala.concurrent.{ExecutionContext, Future}
+import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers._
+
+object TestUtils {
+
+  def stubAuthenticatedAction(
+      user: AuthenticatedUser
+  )(implicit ec: ExecutionContext): AuthenticatedAction = {
+    val mockConfig = mock(classOf[Configuration])
+    when(mockConfig.get[String](anyString())(any())).thenReturn("secret")
+
+    new AuthenticatedAction(
+      Helpers.stubControllerComponents().parsers.default,
+      null,
+      null,
+      mockConfig
+    )(ec) {
+      override def invokeBlock[A](
+          request: Request[A],
+          block: AuthenticatedRequest[A] => Future[Result]
+      ): Future[Result] = {
+        block(AuthenticatedRequest(user, request))
+      }
+    }
+  }
+
+  def stubAuthorizedAction(
+      user: AuthenticatedUser
+  )(implicit ec: ExecutionContext): AuthorizedAction = {
+    new AuthorizedAction(stubAuthenticatedAction(user))(ec) {
+      override def requirePermission(
+          permission: String
+      ): ActionBuilder[AuthenticatedRequest, AnyContent] =
+        new ActionBuilder[AuthenticatedRequest, AnyContent] {
+          override def executionContext: ExecutionContext = ec
+          override def parser: BodyParser[AnyContent] =
+            Helpers.stubControllerComponents().parsers.default
+          override def invokeBlock[A](
+              request: Request[A],
+              block: AuthenticatedRequest[A] => Future[Result]
+          ): Future[Result] =
+            block(AuthenticatedRequest(user, request))
+        }
+    }
+  }
+}

@@ -1,0 +1,120 @@
+package ab.async.tester.controllers
+
+import controllers.BaseControllerSpec
+import ab.async.tester.service.flows.FlowService
+import ab.async.tester.controllers.auth.{
+  AuthorizedAction,
+  AuthenticatedAction,
+  AuthenticatedRequest
+}
+import ab.async.tester.domain.flow.{Floww, FlowAction}
+import ab.async.tester.domain.common.PaginatedResponse
+import ab.async.tester.domain.user.{AuthenticatedUser, UserRole}
+import ab.async.tester.domain.execution.Execution
+import ab.async.tester.domain.requests.RunFlowRequest
+import play.api.test.Helpers._
+import play.api.test.{FakeRequest, Helpers}
+import play.api.libs.json.Json
+import play.api.mvc._
+import scala.concurrent.{Future, ExecutionContext}
+import org.mockito.ArgumentMatchers.any
+import io.circe.generic.auto._
+import io.circe.syntax._
+
+import utils.TestUtils
+
+class FlowsControllerSpec extends BaseControllerSpec {
+
+  val mockFlowService = mock[FlowService]
+
+  val testUser = AuthenticatedUser(
+    "user1",
+    "user@example.com",
+    Some("User"),
+    UserRole.User,
+    false
+  )
+  val stubAuthorizedAction = TestUtils.stubAuthorizedAction(testUser)
+
+  val cc = Helpers.stubControllerComponents()
+  val controller =
+    new FlowsController(cc, mockFlowService, stubAuthorizedAction)
+
+  "FlowsController" should {
+    "getFlows should return flows" in {
+      val flows = List(
+        Floww("1", "test flow", List.empty, "user1", "org1", "team1", 0L, 0L)
+      )
+      val response = PaginatedResponse(flows, 1, 10, 0)
+
+      when(
+        mockFlowService.getFlows(any, any, any, any, any, any[Int], any[Int])
+      )
+        .thenReturn(Future.successful(response))
+
+      val request = FakeRequest(GET, "/api/v1/flows")
+      val result = controller.getFlows(None).apply(request)
+
+      status(result) mustBe OK
+      contentAsJson(result) mustBe Json.parse(response.asJson.noSpaces)
+    }
+
+    "getFlow should return a flow" in {
+      val flow =
+        Floww("1", "test flow", List.empty, "user1", "org1", "team1", 0L, 0L)
+      when(mockFlowService.getFlow("1"))
+        .thenReturn(Future.successful(Some(flow)))
+
+      val request = FakeRequest(GET, "/api/v1/flows/1")
+      val result = controller.getFlow("1").apply(request)
+
+      status(result) mustBe OK
+      contentAsJson(result) mustBe Json.parse(flow.asJson.noSpaces)
+    }
+
+    "addFlow should create a flow" in {
+      val flow = Floww(
+        "1",
+        "new flow",
+        List(
+          FlowAction(
+            "step1",
+            "http",
+            Json.obj().toString(),
+            ab.async.tester.domain.flow.RetryPolicy(3, 1000, 2.0)
+          )
+        ),
+        "user1",
+        "org1",
+        "team1",
+        0L,
+        0L
+      )
+      when(mockFlowService.addFlow(any[Floww]))
+        .thenReturn(Future.successful(flow))
+
+      val request = FakeRequest(POST, "/api/v1/flows")
+        .withJsonBody(Json.parse(flow.asJson.noSpaces))
+
+      val result = controller.addFlow().apply(request)
+
+      status(result) mustBe CREATED
+    }
+
+    "runFlow should create execution" in {
+      val runRequest = RunFlowRequest("flow1", None, Map.empty)
+      val execution =
+        Execution("exec1", "flow1", "pending", 0L, 0L, "user1", "org1", "team1")
+
+      when(mockFlowService.createExecution(any[RunFlowRequest]))
+        .thenReturn(Future.successful(execution))
+
+      val request = FakeRequest(POST, "/api/v1/flows/run")
+        .withJsonBody(Json.parse(runRequest.asJson.noSpaces))
+
+      val result = controller.runFlow().apply(request)
+
+      status(result) mustBe CREATED
+    }
+  }
+}
