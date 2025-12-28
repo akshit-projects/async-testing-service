@@ -77,10 +77,9 @@ object RuntimeVariableSubstitution {
       case lokiMeta: LokiStepMeta =>
         lokiMeta.copy(
           namespace = substituteInString(lokiMeta.namespace, variableMap),
-          labels =
-            lokiMeta.labels.map { case (k, v) =>
-              k -> substituteInString(v, variableMap)
-            },
+          labels = lokiMeta.labels.map { case (k, v) =>
+            k -> substituteInString(v, variableMap)
+          },
           containsPatterns =
             lokiMeta.containsPatterns.map(substituteInString(_, variableMap)),
           notContainsPatterns =

@@ -76,7 +76,7 @@ object StepMeta {
     case sqlMeta @ SqlStepMeta(_, _, _, _, _, _)  => sqlMeta.asJson
     case redisMeta @ RedisStepMeta(_, _, _, _, _, _, _, _, _) =>
       redisMeta.asJson
-    case lokiMeta @ LokiStepMeta(_, _, _, _, _, _, _, _) => lokiMeta.asJson
+    case lokiMeta @ LokiStepMeta(_, _, _, _, _, _, _, _, _) => lokiMeta.asJson
   }
 
   // Type discriminator field for more control
@@ -85,9 +85,7 @@ object StepMeta {
       c.as[HttpStepMeta]
     } else if (c.downField("delayMs").succeeded) {
       c.as[DelayStepMeta]
-    } else if (
-      c.downField("groupId").succeeded && c.downField("maxMessages").succeeded
-    ) {
+    } else if (c.downField("groupId").succeeded) {
       c.as[KafkaSubscribeMeta]
     } else if (c.downField("messages").succeeded) {
       c.as[KafkaPublishMeta]
@@ -98,9 +96,7 @@ object StepMeta {
     ) {
       c.as[RedisStepMeta]
     } else if (
-      c.downField("namespace").succeeded && c.downField("labels").succeeded && c
-        .downField("startTime")
-        .succeeded
+      c.downField("namespace").succeeded && c.downField("labels").succeeded
     ) {
       c.as[LokiStepMeta]
     } else {

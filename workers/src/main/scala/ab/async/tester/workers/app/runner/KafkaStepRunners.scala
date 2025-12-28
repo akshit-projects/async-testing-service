@@ -5,27 +5,19 @@ import ab.async.tester.domain.enums.StepStatus
 import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.kafka.KafkaSearchPattern
 import ab.async.tester.domain.resource.KafkaResourceConfig
-import ab.async.tester.domain.step.{
-  FlowStep,
-  KafkaMessage,
-  KafkaMessagesResponse,
-  KafkaPublishMeta,
-  KafkaSubscribeMeta,
-  StepError,
-  StepResponse
-}
+import ab.async.tester.domain.step.{FlowStep, KafkaMessage, KafkaMessagesResponse, KafkaPublishMeta, KafkaSubscribeMeta, StepError, StepResponse}
 import ab.async.tester.library.cache.{KafkaResourceCache, RedisLockManager}
 import ab.async.tester.library.clients.events.KafkaClient
 import ab.async.tester.library.repository.resource.ResourceRepository
 import ab.async.tester.library.substitution.VariableSubstitutionService
 import com.google.inject.{Inject, Singleton}
 import io.circe.parser._
-import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}
+import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer}
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.StringDeserializer
 
 import java.time.Duration
-import java.util.{Properties, UUID}
+import java.util.{Date, Properties, UUID}
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters._
@@ -316,10 +308,7 @@ class KafkaConsumerStepRunner @Inject() (
             val records = consumer.poll(Duration.ofMillis(500))
 
             for (record <- records.asScala) {
-              val message = KafkaMessage(
-                key = Option(record.key()),
-                value = Option(record.value()).getOrElse("")
-              )
+              val message = createKafkaMessage(record)
 
               // Apply search pattern filtering
               if (matchesSearchPattern(message, kafkaMeta.searchPattern)) {
@@ -428,6 +417,16 @@ class KafkaConsumerStepRunner @Inject() (
     }
   }
 
+  private def createKafkaMessage(record: ConsumerRecord[String, String]) = {
+    KafkaMessage(
+      key = Option(record.key()),
+      value = Option(record.value()).getOrElse(""),
+      partition = Option(record.partition()),
+      offset = Option(record.offset()),
+      timestamp = Option(record.timestamp())
+    )
+  }
+
   private def regularConsumer(
       step: ExecutionStep,
       kafkaMeta: KafkaSubscribeMeta,
@@ -465,10 +464,7 @@ class KafkaConsumerStepRunner @Inject() (
           val records = consumer.poll(Duration.ofMillis(500))
           breakable {
             for (record <- records.asScala) {
-              val message = KafkaMessage(
-                key = Option(record.key()),
-                value = Option(record.value()).getOrElse("")
-              )
+              val message = createKafkaMessage(record)
 
               // Apply search pattern filtering
               if (matchesSearchPattern(message, kafkaMeta.searchPattern)) {

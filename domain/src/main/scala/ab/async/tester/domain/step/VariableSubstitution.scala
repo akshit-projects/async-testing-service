@@ -181,14 +181,14 @@ object VariableSubstitution {
         Try(indexStr.toInt).toOption.flatMap { index =>
           response.columns.lift(index)
         }
-      case "rows" :: indexStr :: columnName :: Nil =>
-        Try(indexStr.toInt).toOption.flatMap { index =>
-          response.rows.lift(index).flatMap(_.get(columnName))
-        }
       case "rows" :: "first" :: columnName :: Nil =>
         response.rows.headOption.flatMap(_.get(columnName))
       case "rows" :: "last" :: columnName :: Nil =>
         response.rows.lastOption.flatMap(_.get(columnName))
+      case "rows" :: indexStr :: columnName :: Nil =>
+        Try(indexStr.toInt).toOption.flatMap { index =>
+          response.rows.lift(index).flatMap(_.get(columnName))
+        }
       case _ => None
     }
   }
@@ -234,6 +234,10 @@ object VariableSubstitution {
       case "matchCount" :: Nil      => Some(response.matchCount.toString)
       case "scannedBytes" :: Nil    => Some(response.scannedBytes.toString)
       case "executionTimeMs" :: Nil => Some(response.executionTimeMs.toString)
+      case "logLines" :: "first" :: "line" :: Nil =>
+        response.logLines.headOption.map(_.line)
+      case "logLines" :: "last" :: "line" :: Nil =>
+        response.logLines.lastOption.map(_.line)
       case "logLines" :: indexStr :: "timestamp" :: Nil =>
         Try(indexStr.toInt).toOption.flatMap { index =>
           response.logLines.lift(index).map(_.timestamp.toString)
@@ -246,10 +250,6 @@ object VariableSubstitution {
         Try(indexStr.toInt).toOption.flatMap { index =>
           response.logLines.lift(index).flatMap(_.labels.get(labelKey))
         }
-      case "logLines" :: "first" :: "line" :: Nil =>
-        response.logLines.headOption.map(_.line)
-      case "logLines" :: "last" :: "line" :: Nil =>
-        response.logLines.lastOption.map(_.line)
       case "logLines" :: "count" :: Nil =>
         Some(response.logLines.length.toString)
       case _ => None

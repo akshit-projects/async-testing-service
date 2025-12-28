@@ -13,7 +13,7 @@ case class LokiResourceConfig(
     name: String,
     url: String, // e.g., "http://loki:3100"
     authToken: Option[String] = None, // Optional Bearer token
-    timeout: Int = 30000
+    timeout: Option[Int] = Some(30000)
 ) extends ResourceConfig {
   override def getId: String = id
   override def getType: String = "loki"

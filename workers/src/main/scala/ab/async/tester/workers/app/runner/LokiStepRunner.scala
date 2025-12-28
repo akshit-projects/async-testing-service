@@ -81,17 +81,24 @@ class LokiStepRunner @Inject() (
 
     logger.info(s"Executing Loki query: $logQLQuery on $queryUrl")
 
+    val (start, end) = resolveTimeRange(lokiMeta)
+
     var request = ws
       .url(queryUrl)
       .withRequestTimeout(
-        scala.concurrent.duration.Duration(lokiConfig.timeout, "ms")
+        scala.concurrent.duration.Duration(lokiConfig.timeout.getOrElse(30000), "ms")
       )
       .addQueryStringParameters(
         "query" -> logQLQuery,
-        "start" -> lokiMeta.startTime.toString,
-        "end" -> lokiMeta.endTime.toString,
         "limit" -> lokiMeta.limit.toString
       )
+
+    request = start.fold(request)(s =>
+      request.addQueryStringParameters("start" -> s.toString)
+    )
+    request = end.fold(request)(e =>
+      request.addQueryStringParameters("end" -> e.toString)
+    )
 
     lokiConfig.authToken.foreach { token =>
       request = request.addHttpHeaders("Authorization" -> s"Bearer $token")
@@ -204,6 +211,48 @@ class LokiStepRunner @Inject() (
       ex
     )
     buildErrorResponse(step, ex.getMessage)
+  }
+
+  private def resolveTimeRange(
+      lokiMeta: LokiStepMeta
+  ): (Option[Long], Option[Long]) = {
+    lokiMeta.relativeTime match {
+      case Some(relative) =>
+        val durationMs = parseRelativeTime(relative)
+        val end = System.currentTimeMillis()
+        val start = end - durationMs
+        (
+          Some(start * 1000000),
+          Some(end * 1000000)
+        ) // Loki expects nanoseconds for timestamps or strings like "5m"
+      case None =>
+        // Convert milliseconds to nanoseconds for Loki if provided
+        (lokiMeta.startTime.map(_ * 1000000), lokiMeta.endTime.map(_ * 1000000))
+    }
+  }
+
+  private def parseRelativeTime(relative: String): Long = {
+    val durationPattern =
+      """(?i)last\s+(\d+)\s*(minute|minutes|hour|hours|day|days|second|seconds|m|h|d|s)""".r
+    val simplePattern = """(\d+)(m|h|d|s)""".r
+
+    val (value, unit) = relative.toLowerCase match {
+      case durationPattern(v, u) => (v.toLong, u)
+      case simplePattern(v, u)   => (v.toLong, u)
+      case _                     =>
+        logger.warn(
+          s"Invalid relative time format: $relative, defaulting to 5 minutes"
+        )
+        (5L, "m")
+    }
+
+    unit match {
+      case "m" | "minute" | "minutes" => value * 60 * 1000
+      case "h" | "hour" | "hours"     => value * 60 * 60 * 1000
+      case "d" | "day" | "days"       => value * 24 * 60 * 60 * 1000
+      case "s" | "second" | "seconds" => value * 1000
+      case _                          => value * 60 * 1000
+    }
   }
 
   /** Build LogQL query from step metadata Example:

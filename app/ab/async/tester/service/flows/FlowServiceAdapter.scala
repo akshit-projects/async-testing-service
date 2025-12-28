@@ -64,6 +64,7 @@ object FlowServiceAdapter {
           redisMeta.field.foreach(f => textBuilder.append(f).append(" "))
 
         case lokiMeta: LokiStepMeta =>
+          lokiMeta.labels.values.foreach(v => textBuilder.append(v).append(" "))
           lokiMeta.containsPatterns.foreach(c =>
             textBuilder.append(c).append(" ")
           )
