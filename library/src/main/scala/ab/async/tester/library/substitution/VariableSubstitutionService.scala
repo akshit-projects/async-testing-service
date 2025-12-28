@@ -51,6 +51,8 @@ class VariableSubstitutionService @Inject()() {
         substituteVariablesInSqlMeta(sqlMeta, stepResponses)
       case redisMeta: RedisStepMeta =>
         substituteVariablesInRedisMeta(redisMeta, stepResponses)
+      case lokiMeta: LokiStepMeta =>
+        substituteVariablesInLokiMeta(lokiMeta, stepResponses)
     }
   }
   
@@ -117,6 +119,17 @@ class VariableSubstitutionService @Inject()() {
         key -> VariableSubstitution.substituteVariables(value, stepResponses)
       }),
       expectedValue = meta.expectedValue.map(VariableSubstitution.substituteVariables(_, stepResponses))
+    )
+  }
+
+  /**
+   * Substitute variables in Redis step meta
+   */
+  private def substituteVariablesInLokiMeta(meta: LokiStepMeta, stepResponses: Map[String, StepResponse]): LokiStepMeta = {
+    meta.copy(
+      containsPatterns = meta.containsPatterns.map(VariableSubstitution.substituteVariables(_, stepResponses)),
+      notContainsPatterns = meta.notContainsPatterns.map(VariableSubstitution.substituteVariables(_, stepResponses)),
+      limit = VariableSubstitution.substituteVariables(meta.limit.toString, stepResponses).toInt,
     )
   }
 }

@@ -5,31 +5,31 @@ import ab.async.tester.domain.enums.StepStatus.IN_PROGRESS
 import ab.async.tester.domain.execution.{Execution, ExecutionStep}
 import ab.async.tester.domain.flow.Floww
 import ab.async.tester.domain.requests.RunFlowRequest
-import ab.async.tester.domain.step.{DelayStepMeta, FlowStep, HttpStepMeta, KafkaPublishMeta, KafkaSubscribeMeta, RedisStepMeta, SqlStepMeta}
+import ab.async.tester.domain.step.{DelayStepMeta, FlowStep, HttpStepMeta, KafkaPublishMeta, KafkaSubscribeMeta, LokiStepMeta, RedisStepMeta, SqlStepMeta}
 
 import java.time.Instant
 
 object FlowServiceAdapter {
 
-  /**
-   * Extracts all variable references from flow steps
-   */
+  /** Extracts all variable references from flow steps
+    */
   def extractVariableReferencesFromSteps(steps: List[FlowStep]): Set[String] = {
     val variablePattern = """\$\{variables\.([^}]+)\}""".r
     val allText = extractAllTextFromSteps(steps)
     variablePattern.findAllMatchIn(allText).map(_.group(1)).toSet
   }
 
-  /**
-   * Extracts all text content from flow steps for variable reference analysis
-   */
+  /** Extracts all text content from flow steps for variable reference analysis
+    */
   private def extractAllTextFromSteps(steps: List[FlowStep]): String = {
     val textBuilder = new StringBuilder()
 
     steps.foreach { step =>
       step.meta match {
         case httpMeta: HttpStepMeta =>
-          httpMeta.headers.map(h => h.values.map(v => textBuilder.append(v).append(" ")))
+          httpMeta.headers.map(h =>
+            h.values.map(v => textBuilder.append(v).append(" "))
+          )
           httpMeta.body.foreach(b => textBuilder.append(b).append(" "))
 
         case kafkaSubMeta: KafkaSubscribeMeta =>
@@ -43,16 +43,25 @@ object FlowServiceAdapter {
             textBuilder.append(message.value).append(" ")
           }
 
-
         case sqlMeta: SqlStepMeta =>
           textBuilder.append(sqlMeta.query).append(" ")
-          sqlMeta.parameters.foreach(_.values.foreach(v => textBuilder.append(v).append(" ")))
+          sqlMeta.parameters.foreach(
+            _.values.foreach(v => textBuilder.append(v).append(" "))
+          )
 
         case redisMeta: RedisStepMeta =>
           textBuilder.append(redisMeta.key).append(" ")
           redisMeta.value.foreach(v => textBuilder.append(v).append(" "))
           redisMeta.field.foreach(f => textBuilder.append(f).append(" "))
 
+        case lokiMeta: LokiStepMeta =>
+          lokiMeta.containsPatterns.foreach(c =>
+            textBuilder.append(c).append(" ")
+          )
+          lokiMeta.notContainsPatterns.foreach(c =>
+            textBuilder.append(c).append(" ")
+          )
+          textBuilder.append(lokiMeta.limit).append(" ")
         case _: DelayStepMeta =>
         // No text content in delay steps
       }
@@ -61,11 +70,13 @@ object FlowServiceAdapter {
     textBuilder.toString()
   }
 
-
-  /**
-   * Creates execution object from flow and run flow request.
-   */
-  def createExecutionEntity(executionId: String, flow: Floww, runFlowRequest: RunFlowRequest): Execution = {
+  /** Creates execution object from flow and run flow request.
+    */
+  def createExecutionEntity(
+      executionId: String,
+      flow: Floww,
+      runFlowRequest: RunFlowRequest
+  ): Execution = {
     val now = Instant.now()
     val execSteps = flow.steps.map { step =>
       ExecutionStep(
@@ -91,7 +102,8 @@ object FlowServiceAdapter {
       steps = execSteps,
       updatedAt = now,
       parameters = Option(runFlowRequest.params),
-      variables = runFlowRequest.variables.map(v => v.copy(value = v.value.trim.strip())),
+      variables =
+        runFlowRequest.variables.map(v => v.copy(value = v.value.trim.strip())),
       testSuiteExecutionId = runFlowRequest.testSuiteExecutionId
     )
   }
