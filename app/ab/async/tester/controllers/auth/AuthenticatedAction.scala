@@ -2,7 +2,10 @@ package ab.async.tester.controllers.auth
 
 import ab.async.tester.domain.response.GenericError
 import ab.async.tester.domain.user.AuthenticatedUser
-import ab.async.tester.library.repository.user.{UserAuthRepository, UserProfileRepository}
+import ab.async.tester.library.repository.user.{
+  UserAuthRepository,
+  UserProfileRepository
+}
 import ab.async.tester.library.utils.MetricUtils
 import com.google.inject.{Inject, Singleton}
 import io.circe.generic.auto._
@@ -15,21 +18,21 @@ import play.api.{Configuration, Logger}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
-/**
- * Request wrapper that includes authenticated user information
- */
-case class AuthenticatedRequest[A](user: AuthenticatedUser, request: Request[A]) extends WrappedRequest[A](request)
+/** Request wrapper that includes authenticated user information
+  */
+case class AuthenticatedRequest[A](user: AuthenticatedUser, request: Request[A])
+    extends WrappedRequest[A](request)
 
-/**
- * Authentication action that verifies JWT tokens and extracts user information
- */
+/** Authentication action that verifies JWT tokens and extracts user information
+  */
 @Singleton
-class AuthenticatedAction @Inject()(
-  parser: BodyParsers.Default,
-  userAuthRepository: UserAuthRepository,
-  userProfileRepository: UserProfileRepository,
-  config: Configuration
-)(implicit ec: ExecutionContext) extends ActionBuilder[AuthenticatedRequest, AnyContent] {
+class AuthenticatedAction @Inject() (
+    parser: BodyParsers.Default,
+    userAuthRepository: UserAuthRepository,
+    userProfileRepository: UserProfileRepository,
+    config: Configuration
+)(implicit ec: ExecutionContext)
+    extends ActionBuilder[AuthenticatedRequest, AnyContent] {
 
   private val jwtSecret = config.get[String]("auth.jwt.secret")
   private val logger = Logger(this.getClass)
@@ -37,7 +40,10 @@ class AuthenticatedAction @Inject()(
   override def executionContext: ExecutionContext = ec
   override def parser: BodyParser[AnyContent] = parser
 
-  override def invokeBlock[A](request: Request[A], block: AuthenticatedRequest[A] => Future[Result]): Future[Result] = {
+  override def invokeBlock[A](
+      request: Request[A],
+      block: AuthenticatedRequest[A] => Future[Result]
+  ): Future[Result] = {
     extractUserFromToken(request) match {
       case Some(tokenUser) =>
         val userAuth = userAuthRepository.findById(tokenUser.userId)
@@ -48,30 +54,50 @@ class AuthenticatedAction @Inject()(
           profileOpt <- profileAuth
         } yield (authOpt, profileOpt)
 
-        userDataFuture.flatMap {
-          case (Some(auth), Some(profile)) =>
-            // Check if user is active
-            if (!profile.isActive) {
-              Future.successful(Results.Unauthorized(GenericError("User account is inactive").asJson.noSpaces))
-            } else {
-              // Use current user data from DB, not stale token data
-              val currentUser = AuthenticatedUser.fromAuthAndProfile(auth, profile)
-              block(AuthenticatedRequest(currentUser, request))
-            }
-          case _ =>
-            // User no longer exists in database
-            Future.successful(Results.Unauthorized(GenericError("User account not found").asJson.noSpaces))
-        }.recover {
-          case ex =>
+        userDataFuture
+          .flatMap {
+            case (Some(auth), Some(profile)) =>
+              // Check if user is active
+              if (!profile.isActive) {
+                Future.successful(
+                  Results.Unauthorized(
+                    GenericError("User account is inactive").asJson.noSpaces
+                  )
+                )
+              } else {
+                // Use current user data from DB, not stale token data
+                val currentUser =
+                  AuthenticatedUser.fromAuthAndProfile(auth, profile)
+                block(AuthenticatedRequest(currentUser, request))
+              }
+            case _ =>
+              // User no longer exists in database
+              Future.successful(
+                Results.Unauthorized(
+                  GenericError("User account not found").asJson.noSpaces
+                )
+              )
+          }
+          .recover { case ex =>
             logger.error("Database error during authentication", ex)
-            Results.InternalServerError(GenericError("Authentication service unavailable").asJson.noSpaces)
-        }
+            Results.InternalServerError(
+              GenericError("Authentication service unavailable").asJson.noSpaces
+            )
+          }
       case None =>
-        Future.successful(Results.Unauthorized(GenericError("Invalid or missing authentication token").asJson.noSpaces))
+        Future.successful(
+          Results.Unauthorized(
+            GenericError(
+              "Invalid or missing authentication token"
+            ).asJson.noSpaces
+          )
+        )
     }
   }
 
-  private def extractUserFromToken[A](request: Request[A]): Option[AuthenticatedUser] = {
+  private def extractUserFromToken[A](
+      request: Request[A]
+  ): Option[AuthenticatedUser] = {
     MetricUtils.withAuthMetrics {
       for {
         authHeader <- request.headers.get("Authorization")
@@ -89,7 +115,9 @@ class AuthenticatedAction @Inject()(
     }
   }
 
-  private def validateTokenAndExtractUser(token: String): Option[AuthenticatedUser] = {
+  private def validateTokenAndExtractUser(
+      token: String
+  ): Option[AuthenticatedUser] = {
     Try {
       Jwt.decode(token, jwtSecret, Seq(JwtAlgorithm.HS256)).toOption
     } match {
@@ -97,16 +125,16 @@ class AuthenticatedAction @Inject()(
         if (claim.isEmpty) return None
         decode[AuthenticatedUser](claim.get.content) match {
           case Right(user) => Some(user)
-          case Left(_) => None
+          case Left(_)     => None
         }
       case Failure(_) => None
     }
   }
 }
 
-/**
- * Companion object for creating authenticated actions
- */
+/** Companion object for creating authenticated actions
+  */
 object AuthenticatedAction {
-  def apply(authenticatedAction: AuthenticatedAction): AuthenticatedAction = authenticatedAction
+  def apply(authenticatedAction: AuthenticatedAction): AuthenticatedAction =
+    authenticatedAction
 }

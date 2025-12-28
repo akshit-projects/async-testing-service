@@ -11,13 +11,17 @@ class DatabaseModule extends AbstractModule {
   @Singleton
   def provideDatabase(configuration: Configuration): Database = {
     // Get database configuration
-    val url = configuration.getOptional[String]("slick.dbs.default.db.url")
+    val url = configuration
+      .getOptional[String]("slick.dbs.default.db.url")
       .getOrElse("jdbc:postgresql://localhost:5432/asynctester")
-    val user = configuration.getOptional[String]("slick.dbs.default.db.user")
+    val user = configuration
+      .getOptional[String]("slick.dbs.default.db.user")
       .getOrElse("asynctester")
-    val password = configuration.getOptional[String]("slick.dbs.default.db.password")
+    val password = configuration
+      .getOptional[String]("slick.dbs.default.db.password")
       .getOrElse("asynctester")
-    val driver = configuration.getOptional[String]("slick.dbs.default.db.driver")
+    val driver = configuration
+      .getOptional[String]("slick.dbs.default.db.driver")
       .getOrElse("org.postgresql.Driver")
 
     Database.forURL(

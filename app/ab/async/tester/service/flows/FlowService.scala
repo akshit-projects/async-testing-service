@@ -10,23 +10,34 @@ import scala.concurrent.Future
 @ImplementedBy(classOf[FlowServiceImpl])
 trait FlowService {
 
-  /**
-   * Creates execution and publishes to Kafka for workers to pick up.
-   * Returns execution details without streaming.
-   */
+  /** Creates execution and publishes to Kafka for workers to pick up. Returns
+    * execution details without streaming.
+    */
   def createExecution(runRequest: RunFlowRequest): Future[Execution]
 
   /** Validates the steps of a flow, throws ValidationException if invalid */
   def validateFlow(flow: Floww): Unit
 
   /** Gets flows based on filter criteria with pagination */
-  def getFlows(search: Option[String], flowIds: Option[List[String]], orgId: Option[String], teamId: Option[String], stepTypes: Option[List[String]], limit: Int, page: Int): Future[PaginatedResponse[Floww]]
+  def getFlows(
+      search: Option[String],
+      flowIds: Option[List[String]],
+      orgId: Option[String],
+      teamId: Option[String],
+      stepTypes: Option[List[String]],
+      limit: Int,
+      page: Int
+  ): Future[PaginatedResponse[Floww]]
 
   /** Gets a single flow by ID */
   def getFlow(id: String): Future[Option[Floww]]
 
   /** Gets all versions of a flow with pagination */
-  def getFlowVersions(flowId: String, limit: Int, page: Int): Future[PaginatedResponse[FlowVersion]]
+  def getFlowVersions(
+      flowId: String,
+      limit: Int,
+      page: Int
+  ): Future[PaginatedResponse[FlowVersion]]
 
   /** Gets a specific version of a flow */
   def getFlowVersion(flowId: String, version: Int): Future[Option[FlowVersion]]

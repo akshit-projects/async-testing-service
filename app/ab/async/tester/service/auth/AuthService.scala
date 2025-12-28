@@ -16,7 +16,11 @@ trait AuthService {
   def loginWithEmail(email: String, password: String): Future[AuthResponse]
 
   // User registration
-  def register(email: String, password: String, name: Option[String]): Future[AuthResponse]
+  def register(
+      email: String,
+      password: String,
+      name: Option[String]
+  ): Future[AuthResponse]
 
   // Password reset
   def forgotPassword(email: String): Future[Boolean]

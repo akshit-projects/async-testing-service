@@ -6,7 +6,7 @@ import play.api.Configuration
 
 import java.util.Properties
 
-class EmailService @Inject()(configuration: Configuration) {
+class EmailService @Inject() (configuration: Configuration) {
 
   private val email = configuration.get[String]("services.email.email")
   private val password = configuration.get[String]("services.email.password")
@@ -16,10 +16,13 @@ class EmailService @Inject()(configuration: Configuration) {
   props.put("mail.smtp.auth", "true")
   props.put("mail.smtp.starttls.enable", "true")
 
-  private val session = Session.getInstance(props, new Authenticator {
-    override protected def getPasswordAuthentication =
-      new PasswordAuthentication(email, password)
-  })
+  private val session = Session.getInstance(
+    props,
+    new Authenticator {
+      override protected def getPasswordAuthentication =
+        new PasswordAuthentication(email, password)
+    }
+  )
 
   def sendEmail(to: String, subject: String, body: String): Unit = {
     val message = new MimeMessage(session)

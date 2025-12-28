@@ -7,24 +7,21 @@ import play.api.routing.Router
 import scala.jdk.CollectionConverters._
 
 @Singleton
-class OpenAPIController @Inject()(
-  cc: ControllerComponents,
-  routerProvider: Provider[Router]
-)(implicit ec: scala.concurrent.ExecutionContext) extends AbstractController(cc) {
+class OpenAPIController @Inject() (
+    cc: ControllerComponents,
+    routerProvider: Provider[Router]
+)(implicit ec: scala.concurrent.ExecutionContext)
+    extends AbstractController(cc) {
 
-  /**
-   * Get OpenAPI specification
-   * GET /api/v1/openapi.json
-   */
+  /** Get OpenAPI specification GET /api/v1/openapi.json
+    */
   def getOpenAPISpec: Action[AnyContent] = Action { implicit request =>
     val spec = generateOpenAPISpec()
     Ok(spec).as("application/json")
   }
 
-  /**
-   * Serve Swagger UI
-   * GET /api/v1/docs
-   */
+  /** Serve Swagger UI GET /api/v1/docs
+    */
   def swaggerUI: Action[AnyContent] = Action { implicit request =>
     val html =
       """
@@ -64,24 +61,27 @@ class OpenAPIController @Inject()(
         |</body>
         |</html>
       """.stripMargin
-    
+
     Ok(html).as("text/html")
   }
 
   private def generateOpenAPISpec(): String = {
     // Extract routes from Play router
     val routes = routerProvider.get().documentation
-    
+
     // Group routes by path
     val groupedRoutes = routes.groupBy(_._2)
-    
+
     // Build paths object
-    val paths = groupedRoutes.map { case (path, routeList) =>
-      val operations = routeList.map { case (method, _, _) =>
-        val operationId = s"${method.toLowerCase}_${path.replaceAll("[^a-zA-Z0-9]", "_")}"
-        val summary = s"$method $path"
-        
-        s"""
+    val paths = groupedRoutes
+      .map { case (path, routeList) =>
+        val operations = routeList
+          .map { case (method, _, _) =>
+            val operationId =
+              s"${method.toLowerCase}_${path.replaceAll("[^a-zA-Z0-9]", "_")}"
+            val summary = s"$method $path"
+
+            s"""
            |    "${method.toLowerCase}": {
            |      "operationId": "$operationId",
            |      "summary": "$summary",
@@ -92,15 +92,17 @@ class OpenAPIController @Inject()(
            |      }
            |    }
          """.stripMargin
-      }.mkString(",")
-      
-      s"""
+          }
+          .mkString(",")
+
+        s"""
          |  "${path.replaceAll("\\$", "")}": {
          |$operations
          |  }
        """.stripMargin
-    }.mkString(",")
-    
+      }
+      .mkString(",")
+
     // Generate OpenAPI JSON
     s"""{
        |  "openapi": "3.0.3",
@@ -189,4 +191,3 @@ class OpenAPIController @Inject()(
        |}""".stripMargin
   }
 }
-

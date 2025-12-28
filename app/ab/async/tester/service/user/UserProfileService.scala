@@ -3,7 +3,10 @@ package ab.async.tester.service.user
 import ab.async.tester.domain.requests.auth.UpdateProfileRequest
 import ab.async.tester.domain.user.{PublicUserProfile, UserProfile}
 import ab.async.tester.exceptions.ValidationException
-import ab.async.tester.library.repository.user.{UserAuthRepository, UserProfileRepository}
+import ab.async.tester.library.repository.user.{
+  UserAuthRepository,
+  UserProfileRepository
+}
 import ab.async.tester.library.utils.MetricUtils
 import com.google.inject.{ImplementedBy, Inject, Singleton}
 import play.api.Logger
@@ -14,40 +17,51 @@ import scala.concurrent.{ExecutionContext, Future}
 @ImplementedBy(classOf[UserProfileServiceImpl])
 trait UserProfileService {
   def getUserProfile(userId: String): Future[Option[PublicUserProfile]]
-  def updateUserProfile(userId: String, updateRequest: UpdateProfileRequest): Future[PublicUserProfile]
+  def updateUserProfile(
+      userId: String,
+      updateRequest: UpdateProfileRequest
+  ): Future[PublicUserProfile]
 }
 
 @Singleton
-class UserProfileServiceImpl @Inject()(
-  userAuthRepository: UserAuthRepository,
-  userProfileRepository: UserProfileRepository
-)(implicit ec: ExecutionContext) extends UserProfileService {
+class UserProfileServiceImpl @Inject() (
+    userAuthRepository: UserAuthRepository,
+    userProfileRepository: UserProfileRepository
+)(implicit ec: ExecutionContext)
+    extends UserProfileService {
 
   private implicit val logger: Logger = Logger(this.getClass)
   private val serviceName = "UserProfileService"
 
-  override def getUserProfile(userId: String): Future[Option[PublicUserProfile]] = {
+  override def getUserProfile(
+      userId: String
+  ): Future[Option[PublicUserProfile]] = {
     MetricUtils.withAsyncServiceMetrics(serviceName, "getUserProfile") {
       userProfileRepository.findById(userId).map {
         case Some(profile) =>
-          Some(PublicUserProfile(
-            id = profile.id,
-            name = profile.name,
-            profilePicture = profile.profilePicture,
-            company = profile.company,
-            role = profile.role.name,
-            isAdmin = profile.isAdmin,
-            orgIds = profile.orgIds,
-            teamIds = profile.teamIds,
-            createdAt = profile.createdAt,
-            updatedAt = profile.updatedAt
-          ))
+          Some(
+            PublicUserProfile(
+              id = profile.id,
+              name = profile.name,
+              profilePicture = profile.profilePicture,
+              company = profile.company,
+              role = profile.role.name,
+              isAdmin = profile.isAdmin,
+              orgIds = profile.orgIds,
+              teamIds = profile.teamIds,
+              createdAt = profile.createdAt,
+              updatedAt = profile.updatedAt
+            )
+          )
         case None => None
       }
     }
   }
 
-  override def updateUserProfile(userId: String, updateRequest: UpdateProfileRequest): Future[PublicUserProfile] = {
+  override def updateUserProfile(
+      userId: String,
+      updateRequest: UpdateProfileRequest
+  ): Future[PublicUserProfile] = {
     MetricUtils.withAsyncServiceMetrics(serviceName, "updateUserProfile") {
       for {
         // Get existing profile
@@ -55,7 +69,8 @@ class UserProfileServiceImpl @Inject()(
         (updatedProfile, updatedUserFields) = {
           val existingProfile = profileOpt match {
             case Some(p) => p
-            case None => throw ValidationException(s"User profile not found: $userId")
+            case None    =>
+              throw ValidationException(s"User profile not found: $userId")
           }
           // Update profile fields
           var updatedProfile = existingProfile
@@ -75,7 +90,7 @@ class UserProfileServiceImpl @Inject()(
           }
           (updatedProfile, updatedFields)
         }
-        
+
         // Update phone number in auth table if provided
         _ <- updateRequest.phoneNumber match {
           case Some(phoneNumber) =>
@@ -87,21 +102,23 @@ class UserProfileServiceImpl @Inject()(
                 )
                 userAuthRepository.update(updatedAuth)
               case None =>
-                Future.failed(ValidationException(s"User auth not found: $userId"))
+                Future.failed(
+                  ValidationException(s"User auth not found: $userId")
+                )
             }
           case None => Future.successful(true)
         }
-        
+
         // Save updated profile
         finalProfile = updatedProfile.copy(
           userUpdatedFields = updatedUserFields,
           updatedAt = Instant.now().toEpochMilli
         )
-        
+
         _ <- userProfileRepository.update(finalProfile)
-        
+
         _ = logger.info(s"User profile updated: $userId")
-        
+
       } yield PublicUserProfile(
         id = finalProfile.id,
         name = finalProfile.name,
@@ -117,4 +134,3 @@ class UserProfileServiceImpl @Inject()(
     }
   }
 }
-
