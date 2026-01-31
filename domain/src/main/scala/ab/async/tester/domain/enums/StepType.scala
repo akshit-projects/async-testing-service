@@ -11,6 +11,7 @@ sealed trait StepType {
     case StepType.SqlQuery       => "sql-db"
     case StepType.RedisOperation => "cache"
     case StepType.LokiLogSearch  => "loki_logs"
+    case StepType.Condition      => "condition"
   }
 }
 object StepType {
@@ -21,6 +22,7 @@ object StepType {
   case object SqlQuery extends StepType
   case object RedisOperation extends StepType
   case object LokiLogSearch extends StepType
+  case object Condition extends StepType
 
   implicit val encodeStepStatus: Encoder[StepType] =
     Encoder.encodeString.contramap[StepType] {
@@ -31,6 +33,7 @@ object StepType {
       case SqlQuery       => "sql-db"
       case RedisOperation => "cache"
       case LokiLogSearch  => "loki_logs"
+      case Condition      => "condition"
     }
 
   implicit val decodeStepStatus: Decoder[StepType] = Decoder.decodeString.emap {
@@ -41,6 +44,7 @@ object StepType {
     case "sql-db"                        => Right(SqlQuery)
     case "cache"                         => Right(RedisOperation)
     case "loki_logs" | "loki"            => Right(LokiLogSearch)
+    case "condition" | "if"              => Right(Condition)
     case other                           => Left(s"Unknown StepStatus: $other")
   }
 }

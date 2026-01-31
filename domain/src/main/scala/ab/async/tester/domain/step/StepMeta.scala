@@ -77,6 +77,7 @@ object StepMeta {
     case redisMeta @ RedisStepMeta(_, _, _, _, _, _, _, _, _) =>
       redisMeta.asJson
     case lokiMeta @ LokiStepMeta(_, _, _, _, _, _, _, _, _) => lokiMeta.asJson
+    case conditionMeta @ ConditionStepMeta(_, _, _) => conditionMeta.asJson
   }
 
   // Type discriminator field for more control
@@ -99,7 +100,10 @@ object StepMeta {
       c.downField("namespace").succeeded && c.downField("labels").succeeded
     ) {
       c.as[LokiStepMeta]
+    } else if (c.downField("branches").succeeded) {
+      c.as[ConditionStepMeta]
     } else {
+
       Left(DecodingFailure("Could not determine step meta type", c.history))
     }
   }

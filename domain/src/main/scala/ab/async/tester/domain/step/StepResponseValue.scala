@@ -50,6 +50,12 @@ case class LokiResponse(
     executionTimeMs: Long
 ) extends StepResponseValue
 
+case class ConditionResponse(
+    success: Boolean,
+    matchedChoice: String,
+    generatedSteps: List[FlowStep]
+) extends StepResponseValue
+
 case class LogEntry(
     timestamp: Long,
     line: String,
@@ -72,6 +78,8 @@ object StepResponseValue {
   implicit val logEntryEncoder: Encoder[LogEntry] = deriveEncoder[LogEntry]
   implicit val lokiResponseEncoder: Encoder[LokiResponse] =
     deriveEncoder[LokiResponse]
+  implicit val conditionResponseEncoder: Encoder[ConditionResponse] =
+    deriveEncoder[ConditionResponse]
 
   implicit val encodeStepResponseValue: Encoder[StepResponseValue] =
     Encoder.instance {
@@ -82,8 +90,10 @@ object StepResponseValue {
       case sqlResponse @ SqlResponse(_, _, _, _) => sqlResponse.asJson
       case redisResponse @ RedisResponse(_, _, _, _, _, _) =>
         redisResponse.asJson
-      case stepError @ StepError(_, _, _)          => stepError.asJson
-      case lokiResponse @ LokiResponse(_, _, _, _) => lokiResponse.asJson
+      case stepError @ StepError(_, _, _)                 => stepError.asJson
+      case lokiResponse @ LokiResponse(_, _, _, _)        => lokiResponse.asJson
+      case conditionResponse @ ConditionResponse(_, _, _) =>
+        conditionResponse.asJson
     }
 
   implicit val httpResponseDecoder: Decoder[HttpResponse] =
@@ -100,6 +110,8 @@ object StepResponseValue {
   implicit val logEntryDecoder: Decoder[LogEntry] = deriveDecoder[LogEntry]
   implicit val lokiResponseDecoder: Decoder[LokiResponse] =
     deriveDecoder[LokiResponse]
+  implicit val conditionResponseDecoder: Decoder[ConditionResponse] =
+    deriveDecoder[ConditionResponse]
 
   implicit val decodeStepResponseValue: Decoder[StepResponseValue] =
     List[Decoder[StepResponseValue]](
@@ -109,6 +121,8 @@ object StepResponseValue {
       Decoder[SqlResponse].widen,
       Decoder[RedisResponse].widen,
       Decoder[StepError].widen,
-      Decoder[LokiResponse].widen
+      Decoder[LokiResponse].widen,
+      Decoder[ConditionResponse].widen
     ).reduceLeft(_ or _)
+
 }

@@ -67,7 +67,8 @@ class StepRunnerRegistryImpl @Inject() (
     kafkaConsumerStepRunner: KafkaConsumerStepRunner,
     sqlStepRunner: SqlStepRunner,
     redisStepRunner: RedisStepRunner,
-    lokiStepRunner: LokiStepRunner
+    lokiStepRunner: LokiStepRunner,
+    conditionStepRunner: ConditionStepRunner
 ) extends StepRunnerRegistry {
 
   private val runners = mutable.Map[String, StepRunner]()
@@ -80,6 +81,7 @@ class StepRunnerRegistryImpl @Inject() (
   registerRunner(StepType.SqlQuery.toString, sqlStepRunner)
   registerRunner(StepType.RedisOperation.toString, redisStepRunner)
   registerRunner(StepType.LokiLogSearch.toString, lokiStepRunner)
+  registerRunner(StepType.Condition.toString, conditionStepRunner)
 
   /** Get a runner for a specific step function
     */

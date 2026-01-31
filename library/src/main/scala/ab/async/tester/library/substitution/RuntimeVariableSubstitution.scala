@@ -88,7 +88,21 @@ object RuntimeVariableSubstitution {
 
       case delayMeta: DelayStepMeta =>
         delayMeta // no substitution needed
+
+      case conditionMeta: ConditionStepMeta =>
+        conditionMeta.copy(
+          branches = conditionMeta.branches.map { branch =>
+            branch.copy(
+              condition = branch.condition.copy(
+                left = substituteInString(branch.condition.left, variableMap),
+                right = substituteInString(branch.condition.right, variableMap)
+              )
+            )
+          }
+        )
+
     }
+
   }
 
   /** Substitutes variables in a string using ${variables.variableName} pattern

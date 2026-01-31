@@ -115,6 +115,7 @@ lazy val library = (project in file("library"))
   .dependsOn(domain)
 
 lazy val workers = (project in file("workers"))
+  .enablePlugins(JavaAppPackaging)
   .settings(
     name := "AsyncTesterWorkers",
     libraryDependencies ++= workerDeps,
