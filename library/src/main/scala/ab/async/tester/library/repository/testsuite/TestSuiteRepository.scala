@@ -8,7 +8,7 @@ import io.circe.syntax.EncoderOps
 import play.api.Logger
 import slick.ast.BaseTypedType
 import slick.jdbc.JdbcType
-import slick.jdbc.PostgresProfile.api._
+import ab.async.tester.library.driver.MyPostgresProfile.api._
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -78,11 +78,18 @@ class TestSuiteRepositoryImpl @Inject()(
     }
   }
 
-  private def buildTestSuiteQuery(search: Option[String], creator: Option[String], enabled: Option[Boolean], orgId: Option[String], teamId: Option[String]) = {
+  private def buildTestSuiteQuery(
+      search: Option[String],
+      creator: Option[String],
+      enabled: Option[Boolean],
+      orgId: Option[String],
+      teamId: Option[String]
+  ) = {
     var query = testSuites.asInstanceOf[Query[TestSuiteTable, TestSuite, Seq]]
 
     search.filter(_.nonEmpty).foreach { s =>
-      query = query.filter(_.name.toLowerCase like s"%${s.toLowerCase}%")
+      query = query
+        .filter(ts => (ts.name ilike s"%$s%") || (ts.creator ilike s"%$s%"))
     }
 
     creator.filter(_.nonEmpty).foreach { c =>
@@ -104,7 +111,15 @@ class TestSuiteRepositoryImpl @Inject()(
     query
   }
 
-  override def findAll(search: Option[String], creator: Option[String], enabled: Option[Boolean], orgId: Option[String], teamId: Option[String], limit: Int, page: Int): Future[List[TestSuite]] = {
+  override def findAll(
+      search: Option[String],
+      creator: Option[String],
+      enabled: Option[Boolean],
+      orgId: Option[String],
+      teamId: Option[String],
+      limit: Int,
+      page: Int
+  ): Future[List[TestSuite]] = {
     MetricUtils.withAsyncRepositoryMetrics(repositoryName, "findAll") {
       val query = buildTestSuiteQuery(search, creator, enabled, orgId, teamId)
       db.run(query.drop(page * limit).take(limit).sortBy(_.modifiedAt.desc).result).map(_.toList)
@@ -140,8 +155,10 @@ class TestSuiteRepositoryImpl @Inject()(
     MetricUtils.withAsyncRepositoryMetrics(repositoryName, "update") {
       testSuite.id match {
         case Some(tsId) =>
-          val updatedTestSuite = testSuite.copy(modifiedAt = System.currentTimeMillis())
-          db.run(testSuites.filter(_.id === tsId).update(updatedTestSuite)).map(_ > 0)
+          val updatedTestSuite =
+            testSuite.copy(modifiedAt = System.currentTimeMillis())
+          db.run(testSuites.filter(_.id === tsId).update(updatedTestSuite))
+            .map(_ > 0)
         case None =>
           logger.error("Cannot update test suite without ID")
           Future.successful(false)

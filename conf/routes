@@ -4,6 +4,8 @@ GET     /api/v1/openapi.json            ab.async.tester.controllers.OpenAPIContr
 
 # Flow endpoints
 
+GET     /api/v1/flows/export                   ab.async.tester.controllers.FlowsController.exportFlows()
+POST    /api/v1/flows/import                   ab.async.tester.controllers.FlowsController.importFlows()
 GET     /api/v1/flows                           ab.async.tester.controllers.FlowsController.getFlows(orgId: Option[String])
 POST    /api/v1/flows                          ab.async.tester.controllers.FlowsController.addFlow()
 PUT     /api/v1/flows                          ab.async.tester.controllers.FlowsController.updateFlow()

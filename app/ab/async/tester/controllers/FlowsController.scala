@@ -3,11 +3,14 @@ package ab.async.tester.controllers
 import ab.async.tester.controllers.auth.AuthorizedAction
 import ab.async.tester.domain.flow.Floww
 import ab.async.tester.domain.requests.RunFlowRequest
+import ab.async.tester.domain.response.flow.ImportFlowsResponse
 import ab.async.tester.domain.user.Permissions
+import ab.async.tester.exceptions.ValidationException
 import ab.async.tester.library.utils.{JsonParsers, MetricUtils}
 import ab.async.tester.library.utils.JsonParsers.ResultHelpers
 import ab.async.tester.service.flows.FlowService
 import io.circe.generic.auto._
+import io.circe.jawn
 import io.circe.syntax._
 import play.api.Logger
 import play.api.mvc._
@@ -213,10 +216,81 @@ class FlowsController @Inject() (
             }
             .recover { case ex =>
               logger.error("runFlow failed", ex)
-              InternalServerError(
-                Map("error" -> "failed to create execution").asJsonNoSpaces
-              )
+              InternalServerError(s"Run flow failed due to ${ex.getMessage}")
             }
       }
     }
+
+  /** GET /v1/flows/export?ids=&orgId=&teamId= */
+  def exportFlows(): Action[AnyContent] =
+    authorizedAction.requirePermission(Permissions.FLOWS_READ).async {
+      implicit request =>
+        MetricUtils.withAPIMetrics("exportFlows") {
+          val ids = request.getQueryString("ids").map(_.split(",").toList)
+          val orgId = request.getQueryString("orgId")
+          val teamId = request.getQueryString("teamId")
+
+          flowService.exportFlows(ids, orgId, teamId).map { flows =>
+            Ok(flows.asJson.noSpaces)
+              .as("application/json")
+              .withHeaders(
+                "Content-Disposition" -> "attachment; filename=flows_export.json"
+              )
+          } recover { case ex =>
+            logger.error("exportFlows failed", ex)
+            InternalServerError(
+              Map("error" -> "failed to export flows").asJsonNoSpaces
+            )
+          }
+        }
+    }
+
+  /** POST /v1/flows/import */
+  def importFlows()
+      : Action[MultipartFormData[play.api.libs.Files.TemporaryFile]] =
+    authorizedAction
+      .requirePermission(Permissions.FLOWS_CREATE)
+      .async(parse.multipartFormData) { implicit request =>
+        MetricUtils.withAPIMetrics("importFlows") {
+          request.body.file("file") match {
+            case Some(filePart) =>
+              val file = filePart.ref.path.toFile
+              val source = scala.io.Source.fromFile(file)
+              val content =
+                try source.mkString
+                finally source.close()
+
+              jawn.decode[List[Floww]](content) match {
+                case Right(flows) =>
+                  val creatorId = request.user.userId
+
+                  flowService.importFlows(flows, creatorId).map { imported =>
+                    Ok(
+                      ImportFlowsResponse(s"Successfully imported ${imported.size} flows", imported.size).asJson.noSpaces
+                    ).as("application/json")
+                  } recover {
+                    case ex: ValidationException =>
+                      BadRequest(Map("error" -> ex.getMessage).asJsonNoSpaces)
+                    case ex =>
+                      logger.error("importFlows failed", ex)
+                      InternalServerError(
+                        Map("error" -> "failed to import flows").asJsonNoSpaces
+                      )
+                  }
+                case Left(error) =>
+                  Future.successful(
+                    BadRequest(
+                      Map(
+                        "error" -> s"Invalid JSON format: $error"
+                      ).asJsonNoSpaces
+                    )
+                  )
+              }
+            case None =>
+              Future.successful(
+                BadRequest(Map("error" -> "Missing file").asJsonNoSpaces)
+              )
+          }
+        }
+      }
 }

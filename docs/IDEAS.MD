@@ -1,0 +1,1 @@
+1. Use ULID instead of UUID for sorting in the DB and use pagination better

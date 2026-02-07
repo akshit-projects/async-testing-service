@@ -15,6 +15,14 @@ trait FlowService {
     */
   def createExecution(runRequest: RunFlowRequest): Future[Execution]
 
+  def exportFlows(
+      flowIds: Option[List[String]],
+      orgId: Option[String],
+      teamId: Option[String]
+  ): Future[List[Floww]]
+
+  def importFlows(flows: List[Floww], creatorId: String): Future[List[Floww]]
+
   /** Validates the steps of a flow, throws ValidationException if invalid */
   def validateFlow(flow: Floww): Unit
 
