@@ -1,13 +1,15 @@
 package ab.async.tester.library.substitution
 
 import ab.async.tester.domain.step._
-import ab.async.tester.domain.variable.{VariableValue, VariableDataType}
+import ab.async.tester.domain.step.metas.{ConditionStepMeta, DelayStepMeta, KafkaPublishMeta, KafkaSubscribeMeta, LokiStepMeta, RedisStepMeta, SqlStepMeta}
+import ab.async.tester.domain.variable.{VariableDataType, VariableValue}
+import ab.async.tester.library.utils.VariableSubstitution.substituteInString
+import ab.async.tester.library.utils.stepmeta.StepMetaExtensions.StepMetaOps
 import play.api.Logger
 
 /** Handles runtime variable substitution in flow steps
   */
 object RuntimeVariableSubstitution {
-  private val logger = Logger(this.getClass)
 
   /** Substitutes runtime variables in all steps of a flow
     */
@@ -30,30 +32,8 @@ object RuntimeVariableSubstitution {
       meta: StepMeta,
       variableMap: Map[String, VariableValue]
   ): StepMeta = {
+    return meta.substituteVariablesInStepMeta(variableMap)
     meta match {
-      case httpMeta: HttpStepMeta =>
-        httpMeta.copy(
-          headers = httpMeta.headers.map(_.map { case (k, v) =>
-            k -> substituteInString(v, variableMap)
-          }),
-          body = httpMeta.body.map(substituteInString(_, variableMap))
-        )
-
-      case kafkaSubMeta: KafkaSubscribeMeta =>
-        kafkaSubMeta.copy(
-          topicName = substituteInString(kafkaSubMeta.topicName, variableMap)
-        )
-
-      case kafkaPubMeta: KafkaPublishMeta =>
-        kafkaPubMeta.copy(
-          topicName = substituteInString(kafkaPubMeta.topicName, variableMap),
-          messages = kafkaPubMeta.messages.map { message =>
-            message.copy(
-              key = message.key.map(k => substituteInString(k, variableMap)),
-              value = substituteInString(message.value, variableMap)
-            )
-          }
-        )
 
       case sqlMeta: SqlStepMeta =>
         sqlMeta.copy(
@@ -103,50 +83,6 @@ object RuntimeVariableSubstitution {
 
     }
 
-  }
-
-  /** Substitutes variables in a string using ${variables.variableName} pattern
-    */
-  private def substituteInString(
-      input: String,
-      variableMap: Map[String, VariableValue]
-  ): String = {
-    val variablePattern = """\$\{variables\.([^}]+)\}""".r
-
-    variablePattern.replaceAllIn(
-      input,
-      { matchResult =>
-        val variableName = matchResult.group(1)
-        variableMap.get(variableName) match {
-          case Some(variable) =>
-            val valueStr = substituteVariable(variable)
-            logger.debug(
-              s"Substituting variable '$variableName' with value '$valueStr'"
-            )
-            java.util.regex.Matcher.quoteReplacement(valueStr)
-          case None =>
-            logger.warn(
-              s"Variable '$variableName' not found in runtime variables"
-            )
-            matchResult.matched // keep original
-        }
-      }
-    )
-  }
-
-  /** Converts variable to its string representation based on type
-    */
-  private def substituteVariable(variable: VariableValue): String = {
-    variable.`type` match {
-      case VariableDataType.STRING  => variable.value.toString
-      case VariableDataType.INTEGER => variable.value.asInstanceOf[Int].toString
-      case VariableDataType.DOUBLE  =>
-        variable.value.asInstanceOf[Double].toString
-      case VariableDataType.BOOLEAN =>
-        variable.value.asInstanceOf[Boolean].toString
-      case VariableDataType.DATE =>
-        variable.value.toString // or format as yyyy-MM-dd
-    }
   }
 
   // --- existing extract/validate methods remain unchanged ---

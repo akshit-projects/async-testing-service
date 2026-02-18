@@ -5,16 +5,9 @@ import ab.async.tester.domain.enums.StepStatus.IN_PROGRESS
 import ab.async.tester.domain.execution.{Execution, ExecutionStep}
 import ab.async.tester.domain.flow.Floww
 import ab.async.tester.domain.requests.RunFlowRequest
-import ab.async.tester.domain.step.{
-  DelayStepMeta,
-  FlowStep,
-  HttpStepMeta,
-  KafkaPublishMeta,
-  KafkaSubscribeMeta,
-  LokiStepMeta,
-  RedisStepMeta,
-  SqlStepMeta
-}
+import ab.async.tester.domain.step.metas.{DelayStepMeta, KafkaPublishMeta, KafkaSubscribeMeta, LokiStepMeta, RedisStepMeta, SqlStepMeta}
+import ab.async.tester.domain.step.FlowStep
+import ab.async.tester.library.utils.stepmeta.StepMetaExtensions.StepMetaOps
 
 import java.time.Instant
 
@@ -34,48 +27,38 @@ object FlowServiceAdapter {
     val textBuilder = new StringBuilder()
 
     steps.foreach { step =>
-      step.meta match {
-        case httpMeta: HttpStepMeta =>
-          httpMeta.headers.map(h =>
-            h.values.map(v => textBuilder.append(v).append(" "))
-          )
-          httpMeta.body.foreach(b => textBuilder.append(b).append(" "))
-
-        case kafkaSubMeta: KafkaSubscribeMeta =>
-          textBuilder.append(kafkaSubMeta.topicName).append(" ")
-          textBuilder.append(kafkaSubMeta.groupId).append(" ")
-
-        case kafkaPubMeta: KafkaPublishMeta =>
-          textBuilder.append(kafkaPubMeta.topicName).append(" ")
-          kafkaPubMeta.messages.map { message =>
-            message.key.foreach(k => textBuilder.append(k).append(" "))
-            textBuilder.append(message.value).append(" ")
-          }
-
-        case sqlMeta: SqlStepMeta =>
-          textBuilder.append(sqlMeta.query).append(" ")
-          sqlMeta.parameters.foreach(
-            _.values.foreach(v => textBuilder.append(v).append(" "))
-          )
-
-        case redisMeta: RedisStepMeta =>
-          textBuilder.append(redisMeta.key).append(" ")
-          redisMeta.value.foreach(v => textBuilder.append(v).append(" "))
-          redisMeta.field.foreach(f => textBuilder.append(f).append(" "))
-
-        case lokiMeta: LokiStepMeta =>
-          lokiMeta.labels.values.foreach(v => textBuilder.append(v).append(" "))
-          lokiMeta.containsPatterns.foreach(c =>
-            textBuilder.append(c).append(" ")
-          )
-          lokiMeta.notContainsPatterns.foreach(c =>
-            textBuilder.append(c).append(" ")
-          )
-          textBuilder.append(lokiMeta.limit).append(" ")
-        case _: DelayStepMeta =>
-        // No text content in delay steps
+      val variableData = step.meta.extractVariableFields()
+      textBuilder.append(variableData.mkString(" ")).append(" ")
+//        case kafkaSubMeta: KafkaSubscribeMeta =>
+//          textBuilder.append(kafkaSubMeta.topicName).append(" ")
+//          textBuilder.append(kafkaSubMeta.groupId).append(" ")
+//
+//        case kafkaPubMeta: KafkaPublishMeta =>
+//
+//
+//        case sqlMeta: SqlStepMeta =>
+//          textBuilder.append(sqlMeta.query).append(" ")
+//          sqlMeta.parameters.foreach(
+//            _.values.foreach(v => textBuilder.append(v).append(" "))
+//          )
+//
+//        case redisMeta: RedisStepMeta =>
+//          textBuilder.append(redisMeta.key).append(" ")
+//          redisMeta.value.foreach(v => textBuilder.append(v).append(" "))
+//          redisMeta.field.foreach(f => textBuilder.append(f).append(" "))
+//
+//        case lokiMeta: LokiStepMeta =>
+//          lokiMeta.labels.values.foreach(v => textBuilder.append(v).append(" "))
+//          lokiMeta.containsPatterns.foreach(c =>
+//            textBuilder.append(c).append(" ")
+//          )
+//          lokiMeta.notContainsPatterns.foreach(c =>
+//            textBuilder.append(c).append(" ")
+//          )
+//          textBuilder.append(lokiMeta.limit).append(" ")
+//        case _: DelayStepMeta =>
+//        // No text content in delay steps
       }
-    }
 
     textBuilder.toString()
   }

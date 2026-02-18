@@ -2,9 +2,9 @@ package ab.async.tester.workers.app.runner
 
 import ab.async.tester.domain.enums.{ConditionOperator, StepStatus}
 import ab.async.tester.domain.execution.ExecutionStep
+import ab.async.tester.domain.step.metas.ConditionStepMeta
 import ab.async.tester.domain.step.{
   ConditionResponse,
-  ConditionStepMeta,
   StepResponse
 }
 import ab.async.tester.library.repository.flow.FlowRepository

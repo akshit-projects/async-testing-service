@@ -12,12 +12,10 @@ import ab.async.tester.exceptions.ValidationException
 import ab.async.tester.library.cache.{KafkaResourceCache, RedisClient}
 import ab.async.tester.library.clients.events.KafkaClient
 import ab.async.tester.library.repository.execution.ExecutionRepository
-import ab.async.tester.library.repository.flow.{
-  FlowRepository,
-  FlowVersionRepository
-}
+import ab.async.tester.library.repository.flow.{FlowRepository, FlowVersionRepository}
 import ab.async.tester.library.repository.resource.ResourceRepository
-import ab.async.tester.library.utils.MetricUtils
+import ab.async.tester.library.utils.stepmeta.StepMetaExtensions.StepMetaOps
+import ab.async.tester.library.utils.{MetricUtils, VariableSubstitution}
 import com.google.inject.Singleton
 import com.typesafe.config.Config
 import io.circe.syntax.EncoderOps
@@ -109,15 +107,7 @@ class FlowServiceImpl @Inject() (
   /** Extracts resource ID from a flow step meta
     */
   private def extractResourceId(step: FlowStep): Option[String] = {
-    step.meta match {
-      case httpMeta: HttpStepMeta           => Some(httpMeta.resourceId)
-      case kafkaSubMeta: KafkaSubscribeMeta => Some(kafkaSubMeta.resourceId)
-      case kafkaPubMeta: KafkaPublishMeta   => Some(kafkaPubMeta.resourceId)
-      case sqlMeta: SqlStepMeta             => Some(sqlMeta.resourceId)
-      case redisMeta: RedisStepMeta         => Some(redisMeta.resourceId)
-      case lokiMeta: LokiStepMeta           => Some(lokiMeta.resourceId)
-      case _: DelayStepMeta => None // Delay steps don't use resources
-    }
+    step.meta.getResourceId
   }
 
   /** Checks if a flow contains any of the specified step types
@@ -173,28 +163,16 @@ class FlowServiceImpl @Inject() (
       flow: Floww,
       variables: List[VariableValue]
   ): Unit = {
-    val definedVariables = flow.variables.map(_.name).toSet
-    val runTimeVariables = variables.map(_.name).toSet
-    if (runTimeVariables != definedVariables) {
-      logger.error(
-        s"Not all runtime variables are passed. Missing variables ${definedVariables -- definedVariables}."
-      )
-      throw ValidationException(
-        s"Not all runtime variables are passed. Missing variables ${definedVariables -- definedVariables}."
-      )
+    // variables with no default value must be present in the request
+    val requiredVariables = flow.variables.filter(_.defaultValue.isEmpty).map(_.name).toSet
+    val runTimeVariables = variables.filter(v => v.value.nonEmpty).map(_.name).toSet
+    if (runTimeVariables.size < requiredVariables.size || (requiredVariables -- runTimeVariables).isEmpty) {
+      val msg = s"Not all required runtime variables are passed. Missing variables ${requiredVariables -- runTimeVariables}."
+      logger.error(msg)
+      throw ValidationException(msg)
     }
 
-    val emptyVariableValues =
-      variables.filter(v => v.value == "" || v.value == null)
-    if (emptyVariableValues.nonEmpty) {
-      logger.error(
-        s"Empty values found for variables: ${emptyVariableValues.map(_.name)}. A value must be passed"
-      )
-      throw ValidationException(
-        s"Empty values found for variables: ${emptyVariableValues.map(_.name)}. A value must be passed"
-      )
-    }
-
+    // first check that number of flow variables and passed variables are of same size
     val referencedVariables =
       FlowServiceAdapter.extractVariableReferencesFromSteps(flow.steps)
     val undefinedVariables = referencedVariables -- runTimeVariables

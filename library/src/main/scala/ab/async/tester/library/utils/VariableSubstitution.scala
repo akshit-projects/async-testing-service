@@ -1,26 +1,75 @@
-package ab.async.tester.domain.step
+package ab.async.tester.library.utils
 
+import ab.async.tester.domain.step.metas._
+import ab.async.tester.domain.step._
+import ab.async.tester.domain.variable.{VariableDataType, VariableValue}
+import ab.async.tester.library.utils.stepmeta.StepMetaExtensions.StepMetaOps
 import io.circe.Json
-import io.circe.parser._
+import io.circe.parser.parse
+import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
 import scala.util.Try
 import scala.util.matching.Regex
 
-/** Utility for handling variable substitution in step inputs Supports syntax
-  * like ${stepName.responseField.subField}
-  */
 object VariableSubstitution {
+
+  private val logger = LoggerFactory.getLogger(this.getClass)
+
+  /** Substitutes variables in a string using ${variables.variableName} pattern
+   */
+  def substituteInString(
+                          input: String,
+                          variableMap: Map[String, VariableValue]
+                        ): String = {
+    val variablePattern = """\$\{variables\.([^}]+)\}""".r
+
+    variablePattern.replaceAllIn(
+      input,
+      { matchResult =>
+        val variableName = matchResult.group(1)
+        variableMap.get(variableName) match {
+          case Some(variable) =>
+            val valueStr = substituteVariable(variable)
+            logger.debug(
+              s"Substituting variable '$variableName' with value '$valueStr'"
+            )
+            java.util.regex.Matcher.quoteReplacement(valueStr)
+          case None =>
+            logger.warn(
+              s"Variable '$variableName' not found in runtime variables"
+            )
+            matchResult.matched // keep original
+        }
+      }
+    )
+  }
+
+  /** Converts variable to its string representation based on type
+   */
+  private def substituteVariable(variable: VariableValue): String = {
+    variable.`type` match {
+      case VariableDataType.STRING  => variable.value.toString
+      case VariableDataType.INTEGER => variable.value.asInstanceOf[Int].toString
+      case VariableDataType.DOUBLE  =>
+        variable.value.asInstanceOf[Double].toString
+      case VariableDataType.BOOLEAN =>
+        variable.value.asInstanceOf[Boolean].toString
+      case VariableDataType.DATE =>
+        variable.value.toString // or format as yyyy-MM-dd
+    }
+  }
+
 
   // Regex to match variable references like ${stepName.field.subField}
   private val variablePattern: Regex = """\$\{([^}]+)\}""".r
 
   /** Extract all variable references from a string
-    * @param input
-    *   The input string that may contain variable references
-    * @return
-    *   List of variable references found
-    */
+   * @param input
+   *   The input string that may contain variable references
+   * @return
+   *   List of variable references found
+   */
   def extractVariableReferences(input: String): List[VariableReference] = {
     variablePattern
       .findAllMatchIn(input)
@@ -32,12 +81,12 @@ object VariableSubstitution {
   }
 
   /** Parse a variable reference expression like
-    * "stepName.responseField.subField"
-    * @param expression
-    *   The variable expression
-    * @return
-    *   VariableReference object
-    */
+   * "stepName.responseField.subField"
+   * @param expression
+   *   The variable expression
+   * @return
+   *   VariableReference object
+   */
   private def parseVariableReference(expression: String): VariableReference = {
     val parts = expression.split("\\.")
     if (parts.length < 2) {
@@ -53,17 +102,17 @@ object VariableSubstitution {
   }
 
   /** Substitute variables in a string using step responses
-    * @param input
-    *   The input string containing variable references
-    * @param stepResponses
-    *   Map of step name to step response
-    * @return
-    *   The string with variables substituted
-    */
+   * @param input
+   *   The input string containing variable references
+   * @param stepResponses
+   *   Map of step name to step response
+   * @return
+   *   The string with variables substituted
+   */
   def substituteVariables(
-      input: String,
-      stepResponses: Map[String, StepResponse]
-  ): String = {
+                           input: String,
+                           stepResponses: Map[String, StepResponse]
+                         ): String = {
     variablePattern.replaceAllIn(
       input,
       { m =>
@@ -89,17 +138,17 @@ object VariableSubstitution {
   }
 
   /** Extract value from step response using field path
-    * @param stepResponse
-    *   The step response
-    * @param fieldPath
-    *   List of field names to navigate
-    * @return
-    *   Optional extracted value as string
-    */
+   * @param stepResponse
+   *   The step response
+   * @param fieldPath
+   *   List of field names to navigate
+   * @return
+   *   Optional extracted value as string
+   */
   private def extractValueFromResponse(
-      stepResponse: StepResponse,
-      fieldPath: List[String]
-  ): Option[String] = {
+                                        stepResponse: StepResponse,
+                                        fieldPath: List[String]
+                                      ): Option[String] = {
     stepResponse.response match {
       case httpResponse: HttpResponse =>
         extractFromHttpResponse(httpResponse, fieldPath)
@@ -119,11 +168,11 @@ object VariableSubstitution {
   }
 
   /** Extract value from HTTP response
-    */
+   */
   private def extractFromHttpResponse(
-      response: HttpResponse,
-      fieldPath: List[String]
-  ): Option[String] = {
+                                       response: HttpResponse,
+                                       fieldPath: List[String]
+                                     ): Option[String] = {
     fieldPath match {
       case "status" :: Nil   => Some(response.status.toString)
       case "response" :: Nil => Some(response.response)
@@ -136,11 +185,11 @@ object VariableSubstitution {
   }
 
   /** Extract value from Kafka response
-    */
+   */
   private def extractFromKafkaResponse(
-      response: KafkaMessagesResponse,
-      fieldPath: List[String]
-  ): Option[String] = {
+                                        response: KafkaMessagesResponse,
+                                        fieldPath: List[String]
+                                      ): Option[String] = {
     fieldPath match {
       case "messages" :: indexStr :: "key" :: Nil =>
         Try(indexStr.toInt).toOption.flatMap { index =>
@@ -157,11 +206,11 @@ object VariableSubstitution {
   }
 
   /** Extract value from Delay response
-    */
+   */
   private def extractFromDelayResponse(
-      response: DelayResponse,
-      fieldPath: List[String]
-  ): Option[String] = {
+                                        response: DelayResponse,
+                                        fieldPath: List[String]
+                                      ): Option[String] = {
     fieldPath match {
       case "success" :: Nil => Some(response.success.toString)
       case _                => None
@@ -169,11 +218,11 @@ object VariableSubstitution {
   }
 
   /** Extract value from SQL response
-    */
+   */
   private def extractFromSqlResponse(
-      response: SqlResponse,
-      fieldPath: List[String]
-  ): Option[String] = {
+                                      response: SqlResponse,
+                                      fieldPath: List[String]
+                                    ): Option[String] = {
     fieldPath match {
       case "rowCount" :: Nil        => Some(response.rowCount.toString)
       case "executionTimeMs" :: Nil => Some(response.executionTimeMs.toString)
@@ -194,11 +243,11 @@ object VariableSubstitution {
   }
 
   /** Extract value from Redis response
-    */
+   */
   private def extractFromRedisResponse(
-      response: RedisResponse,
-      fieldPath: List[String]
-  ): Option[String] = {
+                                        response: RedisResponse,
+                                        fieldPath: List[String]
+                                      ): Option[String] = {
     fieldPath match {
       case "operation" :: Nil     => Some(response.operation)
       case "key" :: Nil           => Some(response.key)
@@ -211,11 +260,11 @@ object VariableSubstitution {
   }
 
   /** Extract value from Step error
-    */
+   */
   private def extractFromStepError(
-      error: StepError,
-      fieldPath: List[String]
-  ): Option[String] = {
+                                    error: StepError,
+                                    fieldPath: List[String]
+                                  ): Option[String] = {
     fieldPath match {
       case "error" :: Nil         => Some(error.error)
       case "expectedValue" :: Nil => error.expectedValue
@@ -225,11 +274,11 @@ object VariableSubstitution {
   }
 
   /** Extract value from Loki response
-    */
+   */
   private def extractFromLokiResponse(
-      response: LokiResponse,
-      fieldPath: List[String]
-  ): Option[String] = {
+                                       response: LokiResponse,
+                                       fieldPath: List[String]
+                                     ): Option[String] = {
     fieldPath match {
       case "matchCount" :: Nil      => Some(response.matchCount.toString)
       case "scannedBytes" :: Nil    => Some(response.scannedBytes.toString)
@@ -257,11 +306,11 @@ object VariableSubstitution {
   }
 
   /** Extract value from JSON string using path
-    */
+   */
   private def extractFromJsonString(
-      jsonString: String,
-      path: List[String]
-  ): Option[String] = {
+                                     jsonString: String,
+                                     path: List[String]
+                                   ): Option[String] = {
     parse(jsonString) match {
       case Right(json) => extractFromJson(json, path)
       case Left(_)     => None
@@ -269,11 +318,11 @@ object VariableSubstitution {
   }
 
   /** Extract value from JSON using path
-    */
+   */
   private def extractFromJson(
-      json: Json,
-      path: List[String]
-  ): Option[String] = {
+                               json: Json,
+                               path: List[String]
+                             ): Option[String] = {
     path
       .foldLeft(Option(json)) { (currentJson, field) =>
         currentJson.flatMap { j =>
@@ -292,11 +341,11 @@ object VariableSubstitution {
   }
 
   /** Validate that all variable references in a flow can be resolved
-    * @param steps
-    *   List of flow steps
-    * @return
-    *   List of validation errors
-    */
+   * @param steps
+   *   List of flow steps
+   * @return
+   *   List of validation errors
+   */
   def validateVariableReferences(steps: List[FlowStep]): List[String] = {
     val errors = mutable.ListBuffer[String]()
     val availableSteps = mutable.Set[String]()
@@ -315,11 +364,11 @@ object VariableSubstitution {
   }
 
   /** Validate variable references in a single step
-    */
+   */
   private def validateStepVariableReferences(
-      step: FlowStep,
-      availableSteps: Set[String]
-  ): List[String] = {
+                                              step: FlowStep,
+                                              availableSteps: Set[String]
+                                            ): List[String] = {
     val errors = scala.collection.mutable.ListBuffer[String]()
 
     // Extract all string fields from step meta that might contain variables
@@ -339,16 +388,11 @@ object VariableSubstitution {
   }
 
   /** Extract all string fields from step meta that might contain variable
-    * references
-    */
+   * references
+   */
   private def extractStringFieldsFromStepMeta(meta: StepMeta): List[String] = {
+    return meta.extractStringFieldsFromStepMeta()
     meta match {
-      case httpMeta: HttpStepMeta =>
-        List(
-          httpMeta.body,
-          httpMeta.expectedStatus,
-          httpMeta.expectedResponse
-        ).flatten ++ httpMeta.headers.map(_.values).getOrElse(Nil)
 
       case kafkaSubMeta: KafkaSubscribeMeta =>
         List(kafkaSubMeta.topicName, kafkaSubMeta.groupId)
@@ -357,9 +401,6 @@ object VariableSubstitution {
         kafkaPubMeta.topicName :: kafkaPubMeta.messages.flatMap(msg =>
           List(msg.key, Some(msg.value)).flatten
         )
-
-      case sqlMeta: SqlStepMeta =>
-        List(sqlMeta.query) ++ sqlMeta.parameters.map(_.values).getOrElse(Nil)
 
       case redisMeta: RedisStepMeta =>
         List(
@@ -382,10 +423,8 @@ object VariableSubstitution {
   }
 }
 
-/** Represents a variable reference in a step input
-  */
 case class VariableReference(
-    stepName: String,
-    fieldPath: List[String],
-    originalExpression: String
-)
+                              stepName: String,
+                              fieldPath: List[String],
+                              originalExpression: String
+                            )

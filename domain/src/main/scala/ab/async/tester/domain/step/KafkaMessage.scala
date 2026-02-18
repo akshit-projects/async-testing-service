@@ -6,9 +6,9 @@ import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 case class KafkaMessage(
   key: Option[String],
   value: String,
-  partition: Option[Int],
-  offset: Option[Long],
-  timestamp: Option[Long]
+  partition: Option[Int] = None,
+  offset: Option[Long] = None,
+  timestamp: Option[Long] = None
 )
 
 object KafkaMessage {

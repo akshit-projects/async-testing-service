@@ -2,7 +2,8 @@ package ab.async.tester.workers.app.runner
 
 import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.resource.SQLDBConfig
-import ab.async.tester.domain.step.{SqlResponse, SqlStepMeta, StepResponse}
+import ab.async.tester.domain.step.metas.SqlStepMeta
+import ab.async.tester.domain.step.{SqlResponse, StepResponse}
 import ab.async.tester.library.repository.resource.ResourceRepository
 import ab.async.tester.library.substitution.VariableSubstitutionService
 import ab.async.tester.workers.app.validator.SqlQueryValidator

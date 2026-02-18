@@ -1,6 +1,7 @@
 package ab.async.tester.domain.step
 
 import ab.async.tester.domain.enums.{StepStatus, StepType}
+import ab.async.tester.domain.step.metas.HttpStepMeta
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 

@@ -3,7 +3,8 @@ package ab.async.tester.service.flows
 import ab.async.tester.domain.enums.StepType
 import ab.async.tester.domain.flow.{FlowVersion, Floww}
 import ab.async.tester.domain.resource.ResourceConfig
-import ab.async.tester.domain.step.{FlowStep, HttpStepMeta}
+import ab.async.tester.domain.step.FlowStep
+import ab.async.tester.domain.step.metas.HttpStepMeta
 import ab.async.tester.exceptions.ValidationException
 import ab.async.tester.library.cache.RedisClient
 import ab.async.tester.library.clients.events.KafkaClient

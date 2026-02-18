@@ -1,11 +1,11 @@
-package ab.async.tester.domain.step
+package ab.async.tester.domain.step.metas
 
-import io.circe.{Decoder, Encoder}
-import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
+import ab.async.tester.domain.enums.StepType
+import ab.async.tester.domain.step.StepMeta
 
 /** Step metadata for Loki log search
   */
-case class LokiStepMeta(
+case class ScriptStepMeta(
     resourceId: String,
     namespace: String,
     startTime: Option[Long] = None, // Unix timestamp in milliseconds
@@ -18,9 +18,7 @@ case class LokiStepMeta(
     containsPatterns: List[String] = List.empty, // Must contain all patterns
     notContainsPatterns: List[String] = List.empty,
     limit: Int = 1000
-) extends StepMeta
+) extends StepMeta {
 
-object LokiStepMeta {
-  implicit val encoder: Encoder[LokiStepMeta] = deriveEncoder[LokiStepMeta]
-  implicit val decoder: Decoder[LokiStepMeta] = deriveDecoder[LokiStepMeta]
+  override def stepType: StepType = StepType.LokiLogSearch
 }

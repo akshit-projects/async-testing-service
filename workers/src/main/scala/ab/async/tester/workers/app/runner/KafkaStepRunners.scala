@@ -5,7 +5,8 @@ import ab.async.tester.domain.enums.StepStatus
 import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.kafka.KafkaSearchPattern
 import ab.async.tester.domain.resource.KafkaResourceConfig
-import ab.async.tester.domain.step.{FlowStep, KafkaMessage, KafkaMessagesResponse, KafkaPublishMeta, KafkaSubscribeMeta, StepError, StepResponse}
+import ab.async.tester.domain.step.metas.{KafkaPublishMeta, KafkaSubscribeMeta}
+import ab.async.tester.domain.step.{FlowStep, KafkaMessage, KafkaMessagesResponse, StepError, StepResponse}
 import ab.async.tester.library.cache.{KafkaResourceCache, RedisLockManager}
 import ab.async.tester.library.clients.events.KafkaClient
 import ab.async.tester.library.repository.resource.ResourceRepository

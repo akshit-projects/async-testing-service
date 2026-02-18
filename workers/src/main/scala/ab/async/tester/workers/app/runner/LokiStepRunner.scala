@@ -3,9 +3,9 @@ package ab.async.tester.workers.app.runner
 import ab.async.tester.domain.enums.StepStatus
 import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.resource.LokiResourceConfig
+import ab.async.tester.domain.step.metas.LokiStepMeta
 import ab.async.tester.domain.step.{
   LokiResponse,
-  LokiStepMeta,
   LogEntry,
   StepError,
   StepResponse

@@ -71,6 +71,7 @@ lazy val workerDeps = Seq(
   "ch.qos.logback" % "logback-classic" % "1.4.14", // SLF4J implementation
   "com.typesafe.play" %% "play-ahc-ws-standalone" % "2.2.11", // WSClient for HTTP requests
   "com.typesafe.play" %% "play-ws-standalone-json" % "2.2.11", // JSON support for WS
+  "com.github.docker-java" % "docker-java" % "3.7.0",
   guice
 ) ++ circeDeps ++ Seq(
   "org.scalatestplus.play" %% "scalatestplus-play" % "7.0.1" % Test,

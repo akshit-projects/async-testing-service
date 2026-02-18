@@ -2,6 +2,9 @@ package ab.async.tester.library.substitution
 
 import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.step._
+import ab.async.tester.domain.step.metas._
+import ab.async.tester.library.utils.VariableSubstitution
+import ab.async.tester.library.utils.stepmeta.StepMetaExtensions.StepMetaOps
 import com.google.inject.{Inject, Singleton}
 import play.api.Logger
 
@@ -50,9 +53,8 @@ class VariableSubstitutionService @Inject() () {
       meta: StepMeta,
       stepResponses: Map[String, StepResponse]
   ): StepMeta = {
+    return meta.substituteResponsesInStepMeta(stepResponses)
     meta match {
-      case httpMeta: HttpStepMeta =>
-        substituteVariablesInHttpMeta(httpMeta, stepResponses)
       case kafkaSubMeta: KafkaSubscribeMeta =>
         substituteVariablesInKafkaSubscribeMeta(kafkaSubMeta, stepResponses)
       case kafkaPubMeta: KafkaPublishMeta =>
@@ -92,28 +94,6 @@ class VariableSubstitutionService @Inject() () {
       }
     )
 
-  }
-
-  /** Substitute variables in HTTP step meta
-    */
-  private def substituteVariablesInHttpMeta(
-      meta: HttpStepMeta,
-      stepResponses: Map[String, StepResponse]
-  ): HttpStepMeta = {
-    meta.copy(
-      body = meta.body.map(
-        VariableSubstitution.substituteVariables(_, stepResponses)
-      ),
-      headers = meta.headers.map(_.map { case (key, value) =>
-        key -> VariableSubstitution.substituteVariables(value, stepResponses)
-      }),
-      expectedStatus = meta.expectedStatus.map(
-        VariableSubstitution.substituteVariables(_, stepResponses)
-      ),
-      expectedResponse = meta.expectedResponse.map(
-        VariableSubstitution.substituteVariables(_, stepResponses)
-      )
-    )
   }
 
   /** Substitute variables in Kafka subscribe meta

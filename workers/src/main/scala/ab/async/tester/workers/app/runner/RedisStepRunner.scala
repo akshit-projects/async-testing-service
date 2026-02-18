@@ -2,7 +2,8 @@ package ab.async.tester.workers.app.runner
 
 import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.resource.CacheConfig
-import ab.async.tester.domain.step.{RedisOperation, RedisResponse, RedisStepMeta, StepResponse}
+import ab.async.tester.domain.step.metas.{RedisOperation, RedisStepMeta}
+import ab.async.tester.domain.step.{RedisResponse, StepResponse}
 import ab.async.tester.library.repository.resource.ResourceRepository
 import ab.async.tester.library.substitution.VariableSubstitutionService
 import com.google.inject.{Inject, Singleton}

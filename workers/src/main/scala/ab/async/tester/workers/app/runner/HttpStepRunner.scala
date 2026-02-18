@@ -3,7 +3,8 @@ package ab.async.tester.workers.app.runner
 import ab.async.tester.domain.enums.StepStatus
 import ab.async.tester.domain.execution.ExecutionStep
 import ab.async.tester.domain.resource.APISchemaConfig
-import ab.async.tester.domain.step.{HttpResponse, HttpStepMeta, StepError, StepResponse}
+import ab.async.tester.domain.step.metas.HttpStepMeta
+import ab.async.tester.domain.step.{HttpResponse, StepError, StepResponse}
 import ab.async.tester.library.repository.resource.ResourceRepository
 import ab.async.tester.library.substitution.VariableSubstitutionService
 import ab.async.tester.workers.app.matchers.ResponseMatcher
@@ -27,13 +28,7 @@ class HttpStepRunner @Inject()(
   override protected def executeStep(step: ExecutionStep, previousResults: List[StepResponse]): Future[StepResponse] = {
     try {
       // Extract step metadata - get the HttpStepMeta if available or create a default
-      val httpMeta = step.meta match {
-        case meta: HttpStepMeta => meta
-        case _ =>
-          logger.error(s"Invalid input for step: ${step.name} for step: $step")
-          throw new Exception(s"Invalid input for step: ${step.name}")
-      }
-
+      val httpMeta = step.meta.asInstanceOf[HttpStepMeta]
 
       resourceRepository.findById(httpMeta.resourceId).flatMap { resource =>
         val apiConfig = resource match {
