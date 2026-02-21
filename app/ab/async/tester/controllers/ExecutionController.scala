@@ -4,6 +4,7 @@ import ab.async.tester.controllers.auth.{AuthenticatedAction, AuthorizedAction}
 import ab.async.tester.domain.enums.ExecutionStatus
 import ab.async.tester.domain.response.GenericError
 import ab.async.tester.domain.user.Permissions
+import ab.async.tester.library.communication.ReportingService
 import ab.async.tester.library.utils.JsonParsers.ResultHelpers
 import ab.async.tester.library.utils.MetricUtils
 import io.circe.generic.auto._
@@ -21,6 +22,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class ExecutionController @Inject() (
     cc: ControllerComponents,
     executionsService: ExecutionsService,
+    reportingService: ReportingService,
     authorizedAction: AuthorizedAction
 )(implicit ec: ExecutionContext)
     extends AbstractController(cc) {

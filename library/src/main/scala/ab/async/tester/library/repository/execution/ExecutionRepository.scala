@@ -1,5 +1,6 @@
 package ab.async.tester.library.repository.execution
 
+import ab.async.tester.domain.alert.ReportingConfig
 import ab.async.tester.domain.enums.ExecutionStatus
 import ab.async.tester.domain.execution.{Execution, ExecutionStep}
 import ab.async.tester.domain.variable.VariableValue
@@ -14,16 +15,27 @@ import ab.async.tester.library.repository.execution.ExecutionTable.instantColumn
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
 
-/**
- * Repository for flow execution persistence
- */
+/** Repository for flow execution persistence
+  */
 @ImplementedBy(classOf[ExecutionRepositoryImpl])
 trait ExecutionRepository {
   def saveExecution(execution: Execution): Future[Execution]
   def findById(id: String): Future[Option[Execution]]
-  def getExecutions(pageNumber: Int, pageSize: Int, statuses: Option[List[ExecutionStatus]]): Future[(List[Execution], Int)]
-  def updateStatus(id: String, status: ExecutionStatus, isCompleted: Boolean = false): Future[Boolean]
-  def updateExecutionStep(id: String, stepId: String, step: ExecutionStep): Future[Boolean]
+  def getExecutions(
+      pageNumber: Int,
+      pageSize: Int,
+      statuses: Option[List[ExecutionStatus]]
+  ): Future[(List[Execution], Int)]
+  def updateStatus(
+      id: String,
+      status: ExecutionStatus,
+      isCompleted: Boolean = false
+  ): Future[Boolean]
+  def updateExecutionStep(
+      id: String,
+      stepId: String,
+      step: ExecutionStep
+  ): Future[Boolean]
 }
 
 object ExecutionTable {
@@ -40,14 +52,15 @@ object ExecutionTable {
         case "IN_PROGRESS" => ExecutionStatus.InProgress
         case "COMPLETED"   => ExecutionStatus.Completed
         case "FAILED"      => ExecutionStatus.Failed
-        case other         => throw new IllegalArgumentException(s"Unknown status: $other")
+        case other         =>
+          throw new IllegalArgumentException(s"Unknown status: $other")
       }
     )
 
   implicit val instantColumnType: BaseColumnType[Instant] =
     MappedColumnType.base[Instant, java.sql.Timestamp](
       inst => java.sql.Timestamp.from(inst),
-      ts   => ts.toInstant
+      ts => ts.toInstant
     )
 }
 
@@ -55,45 +68,117 @@ class ExecutionTable(tag: Tag) extends Table[Execution](tag, "executions") {
 
   implicit private val logger: Logger = Logger(this.getClass)
 
-  def id           = column[String]("id", O.PrimaryKey, O.Default(java.util.UUID.randomUUID().toString))
-  def flowId           = column[String]("flowid") // TODO fix casing of flowid
-  def flowVersion      = column[Int]("flowversion")
-  def status       = column[ExecutionStatus]("status")
-  def startedAt       = column[Instant]("startedat")
-  def completedAt       = column[Option[Instant]]("completedat")
-  def steps       =       column[String]("steps")
-  def variables       =       column[Option[String]]("variables")
+  def id = column[String](
+    "id",
+    O.PrimaryKey,
+    O.Default(java.util.UUID.randomUUID().toString)
+  )
+  def flowId = column[String]("flowid") // TODO fix casing of flowid
+  def flowVersion = column[Int]("flowversion")
+  def status = column[ExecutionStatus]("status")
+  def startedAt = column[Instant]("startedat")
+  def completedAt = column[Option[Instant]]("completedat")
+  def steps = column[String]("steps")
+  def variables = column[Option[String]]("variables")
   def updatedAt = column[Instant]("updatedat")
-  def parameters    = column[Option[String]]("parameters")
+  def parameters = column[Option[String]]("parameters")
   def testSuiteExecutionId = column[Option[String]]("testsuiteexecutionid")
+  def reportingConfig = column[Option[String]]("reportingconfig")
 
-  def * = (id.?, flowId, flowVersion, status, startedAt, completedAt, steps, updatedAt, parameters, variables, testSuiteExecutionId) <> (
-    { case (id, flowId, flowVersion, status, startedAt, completedAt, steps, updatedAt, parameters, variables, testSuiteExecutionId) =>
-      val stepsObj = DecodingUtils.decodeWithErrorLogs[List[ExecutionStep]](steps)
-      val variablesObj = DecodingUtils.decodeWithErrorLogs[List[VariableValue]](variables.getOrElse("[]"))
-      val params = parameters.flatMap(DecodingUtils.decodeWithErrorLogs[Option[Map[String, String]]](_))
-      Execution(id.get, flowId, flowVersion, status, startedAt, completedAt, stepsObj, updatedAt, params, variablesObj, testSuiteExecutionId)
+  def * = (
+    id.?,
+    flowId,
+    flowVersion,
+    status,
+    startedAt,
+    completedAt,
+    steps,
+    updatedAt,
+    parameters,
+    variables,
+    testSuiteExecutionId,
+    reportingConfig
+  ) <> (
+    {
+      case (
+            id,
+            flowId,
+            flowVersion,
+            status,
+            startedAt,
+            completedAt,
+            steps,
+            updatedAt,
+            parameters,
+            variables,
+            testSuiteExecutionId,
+            reportingConfig
+          ) =>
+        val stepsObj =
+          DecodingUtils.decodeWithErrorLogs[List[ExecutionStep]](steps)
+        val variablesObj =
+          DecodingUtils.decodeWithErrorLogs[List[VariableValue]](
+            variables.getOrElse("[]")
+          )
+        val params = parameters.flatMap(
+          DecodingUtils.decodeWithErrorLogs[Option[Map[String, String]]](_)
+        )
+        val reportCfg = reportingConfig.flatMap(DecodingUtils.decodeWithErrorLogs[Option[
+          ReportingConfig
+        ]](_))
+        Execution(
+          id.get,
+          flowId,
+          flowVersion,
+          status,
+          startedAt,
+          completedAt,
+          stepsObj,
+          updatedAt,
+          params,
+          variablesObj,
+          testSuiteExecutionId,
+          reportCfg
+        )
     },
     (e: Execution) => {
       val stepsStr = e.steps.asJson.noSpaces
       val params = e.parameters.map(_.asJson.noSpaces)
       val variables = e.variables.asJson.noSpaces
+      val reportCfg = e.reportingConfig.map(_.asJson.noSpaces)
       Option(
-        (Option(e.id), e.flowId, e.flowVersion, e.status, e.startedAt, e.completedAt, stepsStr, e.updatedAt, params, Some(variables), e.testSuiteExecutionId)
+        (
+          Option(e.id),
+          e.flowId,
+          e.flowVersion,
+          e.status,
+          e.startedAt,
+          e.completedAt,
+          stepsStr,
+          e.updatedAt,
+          params,
+          Some(variables),
+          e.testSuiteExecutionId,
+          reportCfg
+        )
       )
     }
   )
 }
 
 @Singleton
-class ExecutionRepositoryImpl @Inject()(db: Database)(implicit ec: ExecutionContext) extends ExecutionRepository {
+class ExecutionRepositoryImpl @Inject() (db: Database)(implicit
+    ec: ExecutionContext
+) extends ExecutionRepository {
   private val executions = TableQuery[ExecutionTable]
   private val repositoryName = "ExecutionRepository"
   implicit private val logger: Logger = Logger(this.getClass)
 
   override def saveExecution(execution: Execution): Future[Execution] = {
     MetricUtils.withAsyncRepositoryMetrics(repositoryName, "saveExecution") {
-      val action = (executions returning executions.map(_.id) into ((exec, id) => exec.copy(id = id.toString))) += execution
+      val action = (executions returning executions.map(_.id) into (
+        (exec, id) => exec.copy(id = id.toString)
+      )) += execution
       db.run(action)
     }
   }
@@ -104,32 +189,39 @@ class ExecutionRepositoryImpl @Inject()(db: Database)(implicit ec: ExecutionCont
     }
   }
 
-  override def updateStatus(id: String, status: ExecutionStatus, isCompleted: Boolean = false): Future[Boolean] = {
+  override def updateStatus(
+      id: String,
+      status: ExecutionStatus,
+      isCompleted: Boolean = false
+  ): Future[Boolean] = {
     MetricUtils.withAsyncRepositoryMetrics(repositoryName, "updateStatus") {
       val now = Instant.now()
       val execution = executions
         .filter(_.id === id)
       val action = if (isCompleted) {
-        execution.map(e => (e.status, e.updatedAt, e.completedAt))
+        execution
+          .map(e => (e.status, e.updatedAt, e.completedAt))
           .update((status, now, Some(Instant.now())))
       } else {
-        execution.map(e => (e.status, e.updatedAt))
+        execution
+          .map(e => (e.status, e.updatedAt))
           .update((status, now))
       }
-
 
       db.run(action).map(_ > 0) // return true if at least 1 row was updated
     }
   }
 
   override def getExecutions(
-                              pageNumber: Int,
-                              pageSize: Int,
-                              statuses: Option[List[ExecutionStatus]]
-                            ): Future[(List[Execution], Int)] = {
+      pageNumber: Int,
+      pageSize: Int,
+      statuses: Option[List[ExecutionStatus]]
+  ): Future[(List[Execution], Int)] = {
     val baseQuery = statuses match {
       case Some(s) if s.nonEmpty =>
-        executions.filter(_.status.inSet(s)) // use inSet (binds automatically for enums with BaseColumnType)
+        executions.filter(
+          _.status.inSet(s)
+        ) // use inSet (binds automatically for enums with BaseColumnType)
       case _ =>
         executions
     }
@@ -150,7 +242,11 @@ class ExecutionRepositoryImpl @Inject()(db: Database)(implicit ec: ExecutionCont
     }
   }
 
-  override def updateExecutionStep(id: String, stepId: String, step: ExecutionStep): Future[Boolean] = {
+  override def updateExecutionStep(
+      id: String,
+      stepId: String,
+      step: ExecutionStep
+  ): Future[Boolean] = {
     for {
       exec <- db.run(executions.filter(_.id === id).result.head)
       updatedSteps = {
@@ -159,8 +255,9 @@ class ExecutionRepositoryImpl @Inject()(db: Database)(implicit ec: ExecutionCont
       }
       res <- {
         val action = executions
-          .filter(_.id === id).map(e => e.steps)
-            .update(updatedSteps.asJson.noSpaces)
+          .filter(_.id === id)
+          .map(e => e.steps)
+          .update(updatedSteps.asJson.noSpaces)
         db.run(action)
       }
     } yield {

@@ -5,7 +5,14 @@ import ab.async.tester.domain.enums.StepStatus.IN_PROGRESS
 import ab.async.tester.domain.execution.{Execution, ExecutionStep}
 import ab.async.tester.domain.flow.Floww
 import ab.async.tester.domain.requests.RunFlowRequest
-import ab.async.tester.domain.step.metas.{DelayStepMeta, KafkaPublishMeta, KafkaSubscribeMeta, LokiStepMeta, RedisStepMeta, SqlStepMeta}
+import ab.async.tester.domain.step.metas.{
+  DelayStepMeta,
+  KafkaPublishMeta,
+  KafkaSubscribeMeta,
+  LokiStepMeta,
+  RedisStepMeta,
+  SqlStepMeta
+}
 import ab.async.tester.domain.step.FlowStep
 import ab.async.tester.library.utils.stepmeta.StepMetaExtensions.StepMetaOps
 
@@ -58,7 +65,7 @@ object FlowServiceAdapter {
 //          textBuilder.append(lokiMeta.limit).append(" ")
 //        case _: DelayStepMeta =>
 //        // No text content in delay steps
-      }
+    }
 
     textBuilder.toString()
   }
@@ -97,7 +104,8 @@ object FlowServiceAdapter {
       parameters = Option(runFlowRequest.params),
       variables =
         runFlowRequest.variables.map(v => v.copy(value = v.value.trim.strip())),
-      testSuiteExecutionId = runFlowRequest.testSuiteExecutionId
+      testSuiteExecutionId = runFlowRequest.testSuiteExecutionId,
+      reportingConfig = runFlowRequest.reportingConfig
     )
   }
 

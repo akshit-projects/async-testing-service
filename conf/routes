@@ -18,6 +18,8 @@ GET     /api/v1/flows/:flowId/versions/:version ab.async.tester.controllers.Flow
 # Execution endpoints
 GET     /api/v1/executions                     ab.async.tester.controllers.ExecutionController.getExecutions()
 GET     /api/v1/executions/:executionId        ab.async.tester.controllers.ExecutionController.getExecution(executionId: String)
+# GET     /api/v1/executions/:executionId/share   ab.async.tester.controllers.ExecutionController.shareExecution(executionId: String)
+# POST    /api/v1/executions/:executionId/export/slack ab.async.tester.controllers.ExecutionController.exportToSlack(executionId: String)
 GET     /api/v1/executions/:executionId/stream ab.async.tester.controllers.ExecutionController.streamExecution(executionId: String, clientId: Option[String])
 
 # Test Suite endpoints
@@ -74,3 +76,11 @@ PUT      /api/v1/profile                 ab.async.tester.controllers.UserManagem
 GET      /api/v1/users                   ab.async.tester.controllers.UserManagementController.getAllUsers(search: Option[String] ?= None, limit: Int ?= 50, page: Int ?= 0)
 GET      /api/v1/users/:id               ab.async.tester.controllers.UserManagementController.getUserById(id: String)
 PUT      /api/v1/users/:id               ab.async.tester.controllers.UserManagementController.updateUser(id: String)
+
+# Webhook endpoints
+POST     /api/v1/webhooks/opsgenie       ab.async.tester.controllers.AlertCallbackController.opsgenieWebhook()
+
+# Opsgenie Mapping management
+POST     /api/v1/alert/mappings       ab.async.tester.controllers.AlertsManagerController.createMapping()
+# GET      /api/v1/alert/mappings       ab.async.tester.controllers.AlertsManagerController.getMappings(orgId: Option[String] ?= None, teamId: Option[String] ?= None)
+DELETE   /api/v1/alert/mappings/:id   ab.async.tester.controllers.AlertsManagerController.deleteMapping(id: String)

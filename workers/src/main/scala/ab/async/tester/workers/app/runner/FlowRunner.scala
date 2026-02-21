@@ -6,6 +6,7 @@ import ab.async.tester.domain.execution.{Execution, ExecutionStatusUpdate, Execu
 import ab.async.tester.domain.step.{ConditionResponse, FlowStep, StepError, StepResponse, StepResponseValue}
 import ab.async.tester.domain.variable.VariableValue
 import ab.async.tester.library.cache.RedisClient
+import ab.async.tester.library.clients.events.KafkaClient
 import ab.async.tester.library.constants.Constants.COMPLETED_EXECUTIONS
 import ab.async.tester.library.repository.execution.ExecutionRepository
 import ab.async.tester.library.repository.testsuite.TestSuiteExecutionRepository
@@ -16,6 +17,7 @@ import akka.actor.ActorSystem
 import akka.pattern.after
 import akka.stream.scaladsl.Sink
 import com.google.inject.{ImplementedBy, Inject, Singleton}
+import com.typesafe.config.Config
 import io.circe.generic.auto._
 import io.circe.jawn.decode
 import io.circe.syntax._
@@ -53,6 +55,7 @@ class FlowRunnerImpl @Inject() (
     stepRunnerRegistry: StepRunnerRegistry,
     redisClient: RedisClient,
     configuration: Configuration,
+    kafkaClient: KafkaClient,
     testSuiteExecutionRepository: TestSuiteExecutionRepository
 )(implicit system: ActorSystem, ec: ExecutionContext)
     extends FlowRunner {
@@ -63,7 +66,19 @@ class FlowRunnerImpl @Inject() (
   // Kafka configuration
   private val workerQueueTopic =
     configuration.get[String]("events.workerQueueTopic")
+  private val executionResultTopic =
+    configuration.get[String]("events.executionResultTopic")
   private val redisChannel = "internal-executions-topic"
+
+  private val kafkaConfig = {
+    import ab.async.tester.domain.clients.kafka.KafkaConfig
+    val conf = configuration.get[Config]("kafka")
+    KafkaConfig(
+      bootstrapServers = conf.getString("bootstrapServers")
+    )
+  }
+
+  private lazy val kafkaPublisher = kafkaClient.getKafkaPublisher(kafkaConfig)
 
   /** Start consuming Kafka messages and executing flows
     */
@@ -138,11 +153,13 @@ class FlowRunnerImpl @Inject() (
               else "Execution failed"
 
             // Update final status
-            updateStatus(execution, finalStatus).map { _ =>
+            updateStatus(execution, finalStatus).flatMap { _ =>
               publishExecutionUpdate(execution.id, message, finalStatus)
+              publishExecutionResult(execution.id)
               logger.info(
                 s"Execution ${execution.id} completed with status: $finalStatus"
               )
+              Future.successful(())
             }
           }
           .recoverWith { case e: Exception =>
@@ -155,10 +172,12 @@ class FlowRunnerImpl @Inject() (
               s"Execution failed: ${e.getMessage}",
               ExecutionStatus.Failed
             )
-            updateStatus(execution, ExecutionStatus.Failed).map { _ =>
+            updateStatus(execution, ExecutionStatus.Failed).flatMap { _ =>
+              publishExecutionResult(execution.id)
               logger.info(
                 s"Execution ${execution.id} completed with status: ${ExecutionStatus.Failed}"
               )
+              Future.successful(())
             }
           }
           .map { _ =>
@@ -410,9 +429,9 @@ class FlowRunnerImpl @Inject() (
                                 timeoutMs = flowStep.timeoutMs,
                                 runInBackground = flowStep.runInBackground,
                                 continueOnSuccess = flowStep.continueOnSuccess,
-                                status =
-                                  StepStatus.PENDING,
-                                startedAt = Instant.now(), // Placeholder, will be updated when run
+                                status = StepStatus.PENDING,
+                                startedAt =
+                                  Instant.now(), // Placeholder, will be updated when run
                                 completedAt = None,
                                 logs = Seq.empty,
                                 response = None
@@ -577,6 +596,37 @@ class FlowRunnerImpl @Inject() (
         s"Failed to publish step update for $executionId/$stepId: ${e.getMessage}",
         e
       )
+    }
+  }
+
+  /** Publish execution result to Kafka for reporting
+    */
+  private def publishExecutionResult(executionId: String): Unit = {
+    executionRepository.findById(executionId).onComplete {
+      case Success(Some(execution)) =>
+        Try {
+          import org.apache.kafka.clients.producer.ProducerRecord
+          val message = execution.asJson.noSpaces
+          val record = new ProducerRecord[String, String](
+            executionResultTopic,
+            executionId,
+            message
+          )
+          kafkaPublisher.send(record)
+          logger.info(s"Published execution result to Kafka for $executionId")
+        }.recover { case e: Exception =>
+          logger.error(
+            s"Failed to publish execution result for $executionId: ${e.getMessage}",
+            e
+          )
+        }
+      case Success(None) =>
+        logger.error(s"Execution not found for publishing result: $executionId")
+      case Failure(e) =>
+        logger.error(
+          s"Error retrieving execution for publishing result: $executionId",
+          e
+        )
     }
   }
 }

@@ -15,17 +15,20 @@ trap handle_term SIGTERM SIGINT
 
 echo "Starting Async Testing Service..."
 
-# Check if we should run the Play server
+CONFIG_FILE=/app/conf/application-prod.conf
+
 if [[ "${RUN_SERVER}" != "false" ]]; then
     echo "Starting Play server..."
-    /app/play/bin/asynctester -Dplay.http.secret.key=${PLAY_SECRET:-changeme} &
+    /app/play/bin/asynctester \
+      -Dconfig.file=$CONFIG_FILE \
+      -Dplay.http.secret.key=${PLAY_SECRET:-changeme} &
     PLAY_PID=$!
 fi
 
-# Check if we should run the workers
 if [[ "${RUN_WORKER}" != "false" ]]; then
     echo "Starting Worker application..."
-    /app/worker/bin/asynctesterworkers &
+    /app/worker/bin/asynctesterworkers \
+      -Dconfig.file=$CONFIG_FILE &
     WORKER_PID=$!
 fi
 

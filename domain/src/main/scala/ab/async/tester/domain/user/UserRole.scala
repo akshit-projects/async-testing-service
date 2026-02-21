@@ -18,6 +18,9 @@ object Permissions {
   val FLOWS_DELETE = "flows:delete"
   val FLOWS_EXECUTE = "flows:execute"
 
+  val ALERT_READ = "flows:read"
+  val ALERT_CREATE = "flows:create"
+
   val ORG_READ = "org:read"
   val ORG_CREATE = "org:create"
   val ORG_UPDATE = "org:update"

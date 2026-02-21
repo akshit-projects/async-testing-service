@@ -1,24 +1,27 @@
 package ab.async.tester.workers.app
 
-import ab.async.tester.library.cache.RedisClient
-import ab.async.tester.library.repository.execution.{ExecutionRepository, ExecutionRepositoryImpl}
-import ab.async.tester.library.repository.resource.{ResourceRepository, ResourceRepositoryImpl}
+import ab.async.tester.library.repository.execution.{
+  ExecutionRepository,
+  ExecutionRepositoryImpl
+}
+import ab.async.tester.library.repository.resource.{
+  ResourceRepository,
+  ResourceRepositoryImpl
+}
 import ab.async.tester.workers.app.runner._
 import akka.actor.ActorSystem
 import akka.stream.Materializer
 import com.google.inject.{AbstractModule, Provides, Singleton}
-import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.config.ConfigFactory
 import play.api.Configuration
 import play.api.libs.ws.StandaloneWSClient
 import play.api.libs.ws.ahc.StandaloneAhcWSClient
 import slick.jdbc.PostgresProfile.api._
 
-import javax.inject.Inject
 import scala.concurrent.ExecutionContext
 
-/**
- * Guice module for worker dependencies
- */
+/** Guice module for worker dependencies
+  */
 class WorkerModule extends AbstractModule {
 
   override def configure(): Unit = {
@@ -64,13 +67,17 @@ class WorkerModule extends AbstractModule {
   @Singleton
   def provideDatabase(configuration: Configuration): Database = {
     // Get database configuration
-    val url = configuration.getOptional[String]("slick.dbs.default.db.url")
+    val url = configuration
+      .getOptional[String]("slick.dbs.default.db.url")
       .getOrElse("jdbc:postgresql://localhost:5432/asynctester")
-    val user = configuration.getOptional[String]("slick.dbs.default.db.user")
+    val user = configuration
+      .getOptional[String]("slick.dbs.default.db.user")
       .getOrElse("asynctester")
-    val password = configuration.getOptional[String]("slick.dbs.default.db.password")
+    val password = configuration
+      .getOptional[String]("slick.dbs.default.db.password")
       .getOrElse("asynctester")
-    val driver = configuration.getOptional[String]("slick.dbs.default.db.driver")
+    val driver = configuration
+      .getOptional[String]("slick.dbs.default.db.driver")
       .getOrElse("org.postgresql.Driver")
 
     Database.forURL(
@@ -83,19 +90,26 @@ class WorkerModule extends AbstractModule {
 
   @Provides
   @Singleton
-  def provideExecutionRepository(database: Database)(implicit ec: ExecutionContext): ExecutionRepository = {
+  def provideExecutionRepository(
+      database: Database
+  )(implicit ec: ExecutionContext): ExecutionRepository = {
     new ExecutionRepositoryImpl(database)
   }
 
   @Provides
   @Singleton
-  def provideResourceRepository(database: Database)(implicit ec: ExecutionContext): ResourceRepository = {
+  def provideResourceRepository(
+      database: Database
+  )(implicit ec: ExecutionContext): ResourceRepository = {
     new ResourceRepositoryImpl(database)
   }
 
   @Provides
   @Singleton
-  def provideWSClient()(implicit actorSystem: ActorSystem, materializer: Materializer): StandaloneWSClient = {
+  def provideWSClient()(implicit
+      actorSystem: ActorSystem,
+      materializer: Materializer
+  ): StandaloneWSClient = {
     StandaloneAhcWSClient()
   }
 }
